@@ -166,6 +166,7 @@
     box-shadow:0 18px 50px rgba(0,0,0,.55);
     touch-action:none;cursor:grab;
     display:flex;align-items:center;justify-content:center;
+    will-change:transform;
   }
   #tarjeta.cargandoFoto{min-width:min(72vw,420px);min-height:min(48vh,400px)}
   #tarjeta.arrastrando{cursor:grabbing;transition:none}
@@ -401,7 +402,6 @@ let decisiones = {};        // clave -> 'si'|'no'|'duda'
 let pilaUndo = [];
 let carpetaNombre = "";
 let modoRepaso = false;
-const cacheURL = new Map(); // idxOrden -> objectURL
 const cachePre = new Map(); // idxOrden -> Image precargada (para poder soltarla)
 
 const $ = id => document.getElementById(id);
@@ -509,8 +509,20 @@ function ultimaSesion(){
 /* ================== Carga de carpeta / fotos ================== */
 const esIOS = /iP(hone|od|ad)/.test(navigator.userAgent) ||
               (navigator.userAgent.includes("Mac") && navigator.maxTouchPoints > 1);
-const PRE_ADELANTE = esIOS ? 2 : 5;   // ventana de precarga (iOS tiene menos memoria)
-const PRE_ATRAS    = esIOS ? 1 : 2;
+/* Ventana de precarga según el equipo, no según la marca: un Samsung de gama media
+   no es una PC aunque tampoco sea iPhone */
+const esTactil = esIOS || (window.matchMedia && matchMedia("(pointer:coarse)").matches);
+const memGB    = navigator.deviceMemory || (esIOS ? 6 : (esTactil ? 4 : 8));
+const PRE_ADELANTE = esTactil ? (memGB <= 4 ? 2 : 3) : 4;
+const PRE_ATRAS    = esTactil ? 1 : 2;
+const CONCURRENCIA = esTactil ? 1 : 2;   // previews generándose a la vez
+/* Lado largo del preview: cubre la pantalla en cualquier orientación, con tope */
+const LADO_PREVIEW = (()=>{
+  const dpr = Math.min(window.devicePixelRatio || 1, 3);
+  const lado = Math.max(screen.width, screen.height) * dpr;
+  const tope = memGB <= 4 ? 1600 : 2560;
+  return Math.min(tope, Math.max(1200, Math.round(lado)));
+})();
 let importPendiente = null;
 
 if(esIOS){
@@ -674,6 +686,7 @@ function empezar(){
   document.body.classList.remove("modoRepaso");
   cola = orden.map((_,i)=>i).filter(i => decisiones[archivos[orden[i]].clave] === undefined);
   pos = 0;
+  posEnCola = new Map(cola.map((v,i)=>[v,i]));
   pilaUndo = [];
   if(!cola.length){ irAFinal(); return; }
   cambiarPantalla("cull");
@@ -687,6 +700,7 @@ function empezarRepaso(){
   document.body.classList.add("modoRepaso");
   cola = orden.map((_,i)=>i).filter(i => decisiones[archivos[orden[i]].clave] === "duda");
   pos = 0;
+  posEnCola = new Map(cola.map((v,i)=>[v,i]));
   pilaUndo = [];
   if(!cola.length) return;
   cambiarPantalla("cull");
@@ -755,16 +769,14 @@ function mostrarFoto(idxOrden, arch){
     clearTimeout(spinTimer);
     verSpin("No se pudo abrir " + arch.nombre + ". Decidí igual y seguí.", false);
   };
-  img.src = urlDe(idxOrden);
-
-  if(img.complete && img.naturalWidth > 0){
-    ocultarSpin();
-    t.classList.remove("cargandoFoto");
-    img.style.visibility = "visible";
-  }else{
-    // 180ms de gracia: si carga rápido no aparece nada y no parpadea
-    spinTimer = setTimeout(()=>{ if(tok === cargaToken) verSpin("Cargando foto…", true); }, 180);
-  }
+  // 180ms de gracia: si el preview ya está listo no aparece nada y no parpadea
+  spinTimer = setTimeout(()=>{ if(tok === cargaToken) verSpin("Cargando foto…", true); }, 180);
+  previewDe(idxOrden).then(u=>{
+    if(tok !== cargaToken) return;
+    if(!u){ cachePreview.delete(idxOrden); return mostrarFoto(idxOrden, arch); }  // quedó fuera de ventana: pedir de nuevo
+    img.src = u;
+    if(img.complete && img.naturalWidth > 0) img.onload();
+  });
 }
 function verSpin(texto, conAro){
   $("spin").style.display = "flex";
@@ -773,20 +785,225 @@ function verSpin(texto, conAro){
 }
 function ocultarSpin(){ $("spin").style.display = "none"; }
 
-function urlDe(idxOrden){
-  if(!cacheURL.has(idxOrden)){
-    cacheURL.set(idxOrden, URL.createObjectURL(archivos[orden[idxOrden]].file));
+
+/* ================== Previews livianos ==================
+   Un JPEG de 24MP descomprimido son ~100MB de RAM. Mostrarlo entero para pintarlo en
+   430px de ancho es lo que ahoga a los teléfonos flojos. Acá se genera una copia chica
+   (LADO_PREVIEW) en un hilo aparte y el visor muestra esa. El zoom sigue usando el original.
+   Cascada: worker → hilo principal → original tal cual (nunca peor que antes). */
+/* Lee orientación EXIF y dimensiones de un JPEG mirando solo la cabecera.
+   Devuelve {orient, w, h}. orient 0 = no encontrada. */
+function leerCabecera(buf){
+  const v = new DataView(buf);
+  let orient = 0, w = 0, h = 0;
+  if(v.byteLength < 4 || v.getUint16(0) !== 0xFFD8) return {orient, w, h};
+  let p = 2;
+  while(p + 4 <= v.byteLength){
+    if(v.getUint8(p) !== 0xFF){ p++; continue; }
+    const marca = v.getUint8(p+1);
+    if(marca === 0xD8 || marca === 0x01 || (marca >= 0xD0 && marca <= 0xD7)){ p += 2; continue; }
+    if(marca === 0xD9 || marca === 0xDA) break;           // fin / inicio de datos
+    const largo = v.getUint16(p+2);
+    if(largo < 2) break;
+    // SOF0..SOF15 (menos DHT C4, JPG C8, DAC CC): alto/ancho
+    if(marca >= 0xC0 && marca <= 0xCF && marca !== 0xC4 && marca !== 0xC8 && marca !== 0xCC){
+      if(p + 9 <= v.byteLength){ h = v.getUint16(p+5); w = v.getUint16(p+7); }
+    }
+    // APP1 Exif: orientación
+    if(marca === 0xE1 && !orient && p + 10 <= v.byteLength &&
+       v.getUint32(p+4) === 0x45786966 && v.getUint16(p+8) === 0){
+      const t = p + 10;                                     // inicio del TIFF
+      if(t + 8 <= v.byteLength){
+        const le = v.getUint16(t) === 0x4949;               // "II" = little endian
+        const ifd = t + v.getUint32(t+4, le);
+        if(ifd + 2 <= v.byteLength){
+          const n = v.getUint16(ifd, le);
+          for(let i = 0; i < n; i++){
+            const e = ifd + 2 + i*12;
+            if(e + 12 > v.byteLength) break;
+            if(v.getUint16(e, le) === 0x0112){ orient = v.getUint16(e+8, le); break; }
+          }
+        }
+      }
+    }
+    if(orient && w) break;
+    p += 2 + largo;
   }
-  return cacheURL.get(idxOrden);
+  return {orient, w, h};
 }
+
+const cachePreview = new Map();   // idxOrden -> Promise<url>
+const urlOriginal  = new Map();   // idxOrden -> url del archivo original (solo si el preview falló)
+let posEnCola = new Map();        // idxOrden -> posición en cola (para priorizar la actual)
+let workerPrev = null, workerRoto = false, fallosWorker = 0;
+let pendientes = [];              // idxOrden esperando generación
+let generando = 0;
+const esperando = new Map();      // idxOrden -> {resolve}
+
+const CODIGO_WORKER = `
+/* Lee orientación EXIF y dimensiones de un JPEG mirando solo la cabecera.
+   Devuelve {orient, w, h}. orient 0 = no encontrada. */
+function leerCabecera(buf){
+  const v = new DataView(buf);
+  let orient = 0, w = 0, h = 0;
+  if(v.byteLength < 4 || v.getUint16(0) !== 0xFFD8) return {orient, w, h};
+  let p = 2;
+  while(p + 4 <= v.byteLength){
+    if(v.getUint8(p) !== 0xFF){ p++; continue; }
+    const marca = v.getUint8(p+1);
+    if(marca === 0xD8 || marca === 0x01 || (marca >= 0xD0 && marca <= 0xD7)){ p += 2; continue; }
+    if(marca === 0xD9 || marca === 0xDA) break;           // fin / inicio de datos
+    const largo = v.getUint16(p+2);
+    if(largo < 2) break;
+    // SOF0..SOF15 (menos DHT C4, JPG C8, DAC CC): alto/ancho
+    if(marca >= 0xC0 && marca <= 0xCF && marca !== 0xC4 && marca !== 0xC8 && marca !== 0xCC){
+      if(p + 9 <= v.byteLength){ h = v.getUint16(p+5); w = v.getUint16(p+7); }
+    }
+    // APP1 Exif: orientación
+    if(marca === 0xE1 && !orient && p + 10 <= v.byteLength &&
+       v.getUint32(p+4) === 0x45786966 && v.getUint16(p+8) === 0){
+      const t = p + 10;                                     // inicio del TIFF
+      if(t + 8 <= v.byteLength){
+        const le = v.getUint16(t) === 0x4949;               // "II" = little endian
+        const ifd = t + v.getUint32(t+4, le);
+        if(ifd + 2 <= v.byteLength){
+          const n = v.getUint16(ifd, le);
+          for(let i = 0; i < n; i++){
+            const e = ifd + 2 + i*12;
+            if(e + 12 > v.byteLength) break;
+            if(v.getUint16(e, le) === 0x0112){ orient = v.getUint16(e+8, le); break; }
+          }
+        }
+      }
+    }
+    if(orient && w) break;
+    p += 2 + largo;
+  }
+  return {orient, w, h};
+}
+
+self.onmessage = async e => {
+  const {id, file, lado} = e.data;
+  try{
+    const cab = leerCabecera(await file.slice(0, 131072).arrayBuffer());
+    let bmp;
+    try{ bmp = await createImageBitmap(file, {imageOrientation:"from-image"}); }
+    catch(err){ bmp = await createImageBitmap(file); }
+    // si el EXIF pide rotar 90° y el navegador no lo hizo (dimensiones no intercambiadas), lo hago yo
+    const rotar = (cab.orient >= 5 && cab.orient <= 8) && cab.w && bmp.width === cab.w;
+    const srcW = bmp.width, srcH = bmp.height;
+    const outW0 = rotar ? srcH : srcW, outH0 = rotar ? srcW : srcH;
+    const esc = Math.min(1, lado / Math.max(outW0, outH0));
+    const tw = Math.max(1, Math.round(outW0 * esc)), th = Math.max(1, Math.round(outH0 * esc));
+    const c = new OffscreenCanvas(tw, th);
+    const ctx = c.getContext("2d");
+    if(rotar){
+      ctx.translate(tw/2, th/2);
+      ctx.rotate((cab.orient === 6 ? 90 : cab.orient === 8 ? -90 : 90) * Math.PI/180);
+      ctx.drawImage(bmp, -th/2, -tw/2, th, tw);
+    }else{
+      ctx.drawImage(bmp, 0, 0, tw, th);
+    }
+    bmp.close();
+    const blob = await c.convertToBlob({type:"image/jpeg", quality:0.82});
+    self.postMessage({id, blob});
+  }catch(err){
+    self.postMessage({id, error: String(err && err.message || err)});
+  }
+};`;
+
+function crearWorker(){
+  if(workerRoto || workerPrev) return;
+  try{
+    if(typeof Worker === "undefined" || typeof OffscreenCanvas === "undefined" ||
+       typeof createImageBitmap === "undefined") { workerRoto = true; return; }
+    workerPrev = new Worker(URL.createObjectURL(new Blob([CODIGO_WORKER], {type:"text/javascript"})));
+    workerPrev.onmessage = e=>{
+      const {id, blob, error} = e.data;
+      const esp = esperando.get(id);
+      esperando.delete(id);
+      generando--;
+      if(!esp) { bombear(); return; }
+      if(blob && blob.size > 0){
+        fallosWorker = 0;
+        esp.resolve(URL.createObjectURL(blob));
+      }else{
+        if(++fallosWorker >= 3) workerRoto = true;   // el worker no sirve acá: dejamos de usarlo
+        generarEnPrincipal(id).then(esp.resolve);
+      }
+      bombear();
+    };
+    workerPrev.onerror = ()=>{ workerRoto = true; for(const [id,esp] of esperando){ generarEnPrincipal(id).then(esp.resolve); } esperando.clear(); generando = 0; bombear(); };
+  }catch(err){ workerRoto = true; }
+}
+
+/* Plan B: mismo trabajo en el hilo principal. <img> aplica la orientación EXIF solo. */
+async function generarEnPrincipal(idxOrden){
+  const file = archivos[orden[idxOrden]].file;
+  const u = URL.createObjectURL(file);
+  try{
+    const im = new Image();
+    im.decoding = "async";
+    im.src = u;
+    if(im.decode) await im.decode(); else await new Promise((r,j)=>{ im.onload=r; im.onerror=j; });
+    const esc = Math.min(1, LADO_PREVIEW / Math.max(im.naturalWidth, im.naturalHeight));
+    const tw = Math.max(1, Math.round(im.naturalWidth*esc)), th = Math.max(1, Math.round(im.naturalHeight*esc));
+    const c = document.createElement("canvas"); c.width = tw; c.height = th;
+    c.getContext("2d").drawImage(im, 0, 0, tw, th);
+    im.src = "";
+    const blob = await new Promise(r=>c.toBlob(r, "image/jpeg", 0.82));
+    URL.revokeObjectURL(u);
+    if(blob && blob.size > 0) return URL.createObjectURL(blob);
+  }catch(err){ URL.revokeObjectURL(u); }
+  // Plan C: el original tal cual (como funcionaba antes)
+  const uo = URL.createObjectURL(file);
+  urlOriginal.set(idxOrden, uo);
+  return uo;
+}
+
+function bombear(){
+  while(generando < CONCURRENCIA && pendientes.length){
+    // prioridad: la más cercana a la foto actual (la actual primero)
+    let mejor = 0, mejorD = Infinity;
+    for(let i=0;i<pendientes.length;i++){
+      const d = Math.abs((posEnCola.get(pendientes[i]) ?? 1e9) - pos);
+      if(d < mejorD){ mejorD = d; mejor = i; }
+    }
+    const id = pendientes.splice(mejor,1)[0];
+    const esp = esperando.get(id);
+    if(!esp) continue;
+    // ya quedó fuera de la ventana: no gastamos CPU, se pedirá de nuevo si hace falta
+    if(mejorD > PRE_ADELANTE + PRE_ATRAS + 1){ esperando.delete(id); cachePreview.delete(id); esp.resolve(null); continue; }
+    generando++;
+    if(!workerRoto){
+      crearWorker();
+      if(workerPrev){ workerPrev.postMessage({id, file: archivos[orden[id]].file, lado: LADO_PREVIEW}); continue; }
+    }
+    generarEnPrincipal(id).then(u=>{ esperando.delete(id); generando--; esp.resolve(u); bombear(); });
+  }
+}
+
+function previewDe(idxOrden){
+  if(cachePreview.has(idxOrden)) return cachePreview.get(idxOrden);
+  const pr = new Promise(resolve=>{ esperando.set(idxOrden, {resolve}); pendientes.push(idxOrden); });
+  cachePreview.set(idxOrden, pr);
+  bombear();
+  return pr;
+}
+
 function precargar(){
   for(let k=1;k<=PRE_ADELANTE;k++){
     const p = pos + k;
     if(p < cola.length && !cachePre.has(cola[p])){
-      const im = new Image();
-      im.decoding = "async";
-      im.src = urlDe(cola[p]);
-      cachePre.set(cola[p], im);
+      const id = cola[p];
+      cachePre.set(id, null);                 // reservado
+      previewDe(id).then(u=>{
+        if(!u || !cachePre.has(id)) return;
+        const im = new Image();               // decodifica el preview chico para que el swipe no espere
+        im.decoding = "async";
+        im.src = u;
+        cachePre.set(id, im);
+      });
     }
   }
 }
@@ -796,12 +1013,17 @@ function limpiarCache(){
     const p = pos + k;
     if(p>=0 && p<cola.length) vivos.add(cola[p]);
   }
-  // Una foto de 24MP descomprimida ocupa ~100MB en memoria: hay que soltarlas sí o sí
   for(const [k,im] of cachePre){
-    if(!vivos.has(k)){ im.src = ""; cachePre.delete(k); }
+    if(!vivos.has(k)){ if(im) im.src = ""; cachePre.delete(k); }
   }
-  for(const [k,u] of cacheURL){
-    if(!vivos.has(k)){ URL.revokeObjectURL(u); cacheURL.delete(k); }
+  for(const [k,pr] of cachePreview){
+    if(!vivos.has(k)){
+      cachePreview.delete(k);
+      pr.then(u=>{ if(u && !urlOriginal.has(k)) URL.revokeObjectURL(u); });
+    }
+  }
+  for(const [k,u] of urlOriginal){
+    if(!vivos.has(k)){ URL.revokeObjectURL(u); urlOriginal.delete(k); }
   }
 }
 
