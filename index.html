@@ -133,8 +133,9 @@
   }
   #capaZoom.abierta{display:flex}
   #imgZoom{
-    position:absolute;transform-origin:0 0;
+    position:absolute;top:0;left:0;transform-origin:0 0;
     max-width:none;max-height:none;pointer-events:none;
+    will-change:transform;
   }
   #salirZoom{
     position:absolute;top:calc(14px + env(safe-area-inset-top));right:14px;
@@ -337,13 +338,13 @@
       <div id="nombreArchivo"></div>
     </div>
     <div id="spin"><div id="spinAro"></div><div id="spinTxt"></div></div>
-    <button id="btnZoom">🔍 100%</button>
+    <button id="btnZoom">🔍 Ampliar</button>
   </div>
 
   <div id="capaZoom">
     <img id="imgZoom" alt="">
     <button id="salirZoom">✕ Cerrar</button>
-    <div id="avisoZoom">Pellizcá para acercar · arrastrá para moverte</div>
+    <div id="avisoZoom">Pellizcá o tocá dos veces para acercar</div>
     <div id="nivelZoom">100%</div>
   </div>
 
@@ -1011,6 +1012,31 @@ function soltarZoom(e){
 }
 capaZ.addEventListener("pointerup", soltarZoom);
 capaZ.addEventListener("pointercancel", soltarZoom);
+
+/* Doble toque adentro del zoom: salta al 100% justo donde tocaste (como la galería) */
+let tapPrevio = 0, tapX = 0, tapY = 0;
+capaZ.addEventListener("pointerup", e=>{
+  if(e.target.id === "salirZoom" || punteros.size) return;
+  const ahora = Date.now();
+  const cerca = Math.hypot(e.clientX - tapX, e.clientY - tapY) < 40;
+  if(ahora - tapPrevio < 300 && cerca){
+    tapPrevio = 0;
+    if(zEsc > zMin * 1.05) escalarEn(zMin, window.innerWidth/2, window.innerHeight/2);
+    else escalarEn(1, e.clientX, e.clientY);
+  }else{
+    tapPrevio = ahora; tapX = e.clientX; tapY = e.clientY;
+  }
+});
+
+/* Si gira el teléfono, recalcula el encaje */
+window.addEventListener("resize", ()=>{
+  if(!zoomAbierto) return;
+  const img = $("imgZoom");
+  if(!img.naturalWidth) return;
+  zMin = Math.min(window.innerWidth / img.naturalWidth, window.innerHeight / img.naturalHeight);
+  if(zEsc < zMin) zEsc = zMin;
+  aplicarZoom();
+});
 
 /* En la compu: rueda del mouse para acercar */
 capaZ.addEventListener("wheel", e=>{
