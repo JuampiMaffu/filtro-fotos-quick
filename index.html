@@ -126,6 +126,33 @@
     display:flex;align-items:center;justify-content:center;
     padding:8px 16px;min-height:0;
   }
+  #capaZoom{
+    position:fixed;inset:0;z-index:120;display:none;
+    background:#050A24;overflow:hidden;touch-action:none;
+    align-items:center;justify-content:center;
+  }
+  #capaZoom.abierta{display:flex}
+  #imgZoom{
+    position:absolute;transform-origin:0 0;
+    max-width:none;max-height:none;pointer-events:none;
+  }
+  #salirZoom{
+    position:absolute;top:calc(14px + env(safe-area-inset-top));right:14px;
+    background:rgba(5,10,36,.85);color:var(--oro);border:1.5px solid var(--oro);
+    font-weight:800;font-size:14px;padding:10px 18px;border-radius:12px;z-index:2;
+  }
+  #avisoZoom{
+    position:absolute;bottom:calc(18px + env(safe-area-inset-bottom));left:50%;
+    translate:-50% 0;background:rgba(5,10,36,.85);color:var(--gris);
+    font-size:12.5px;padding:7px 14px;border-radius:10px;white-space:nowrap;z-index:2;
+  }
+  #btnZoom{
+    position:absolute;bottom:10px;right:10px;z-index:6;
+    background:rgba(5,10,36,.72);color:var(--blanco);
+    border:1.5px solid var(--azul-borde);border-radius:11px;
+    font-size:13px;font-weight:700;padding:8px 13px;
+  }
+  #btnZoom:hover{color:var(--oro);border-color:var(--oro)}
   #tarjeta{
     position:relative;max-width:100%;max-height:100%;
     border-radius:var(--radio);overflow:hidden;
@@ -305,6 +332,13 @@
       <div id="nombreArchivo"></div>
     </div>
     <div id="spin"><div id="spinAro"></div><div id="spinTxt"></div></div>
+    <button id="btnZoom">🔍 100%</button>
+  </div>
+
+  <div id="capaZoom">
+    <img id="imgZoom" alt="">
+    <button id="salirZoom">✕ Cerrar</button>
+    <div id="avisoZoom">Arrastrá para moverte · doble toque para salir</div>
   </div>
 
   <div class="barraInf">
@@ -407,6 +441,23 @@ document.addEventListener("visibilitychange", ()=>{
 });
 window.addEventListener("pagehide", flushGuardar);
 window.addEventListener("blur", flushGuardar);
+/* ================== Respaldo (segunda copia, por si se corrompe la principal) ================== */
+let decididasDesdeRespaldo = 0;
+const CADA_CUANTAS = 100;
+
+function respaldoSilencioso(forzar){
+  decididasDesdeRespaldo++;
+  if(!forzar && decididasDesdeRespaldo < CADA_CUANTAS) return;
+  decididasDesdeRespaldo = 0;
+  if(!db || !carpetaNombre) return;
+  try{
+    const tx = db.transaction("sesiones","readwrite");
+    tx.objectStore("sesiones").put(
+      {decisiones, fecha: Date.now(), total: archivos.length, respaldo: true},
+      "RESPALDO__" + carpetaNombre);
+  }catch(err){/* el respaldo nunca debe frenar el filtrado */}
+}
+
 function cargarSesion(nombre){
   return new Promise(res=>{
     if(!db) return res(null);
@@ -619,6 +670,7 @@ function empezar(){
   pilaUndo = [];
   if(!cola.length){ irAFinal(); return; }
   cambiarPantalla("cull");
+  pedirWakeLock();
   $("numTotal").textContent = fmt(orden.length);
   refrescar();
 }
@@ -631,6 +683,7 @@ function empezarRepaso(){
   pilaUndo = [];
   if(!cola.length) return;
   cambiarPantalla("cull");
+  pedirWakeLock();
   $("numTotal").textContent = fmt(cola.length);
   refrescar();
 }
@@ -753,6 +806,7 @@ function decidir(d){
   pilaUndo.push({pos, clave, previa: decisiones[clave]});
   decisiones[clave] = d;
   guardar();
+  respaldoSilencioso(false);
   animarSalida(d);
 }
 function deshacer(){
@@ -792,9 +846,11 @@ function mostrarSello(d, fuerza){
 
 /* ================== Arrastre (swipe) ================== */
 let drag = null;
+let ultimoDesplazamiento = 0;
 const tarjeta = $("tarjeta");
 tarjeta.addEventListener("pointerdown", e=>{
-  if(pos >= cola.length) return;
+  if(pos >= cola.length || zoomAbierto) return;
+  ultimoDesplazamiento = 0;
   drag = {x0:e.clientX, y0:e.clientY, dx:0, dy:0};
   tarjeta.setPointerCapture(e.pointerId);
   tarjeta.classList.add("arrastrando");
@@ -804,6 +860,7 @@ tarjeta.addEventListener("pointermove", e=>{
   if(!drag) return;
   drag.dx = e.clientX - drag.x0;
   drag.dy = e.clientY - drag.y0;
+  ultimoDesplazamiento = Math.max(ultimoDesplazamiento, Math.abs(drag.dx), Math.abs(drag.dy));
   tarjeta.style.transform = `translate(${drag.dx}px, ${drag.dy}px) rotate(${drag.dx*0.04}deg)`;
   const d = direccionDe(drag);
   mostrarSello(d, d ? Math.min(1, intensidadDe(drag)) : 0);
@@ -835,9 +892,103 @@ function intensidadDe(g){
   return Math.abs(g.dx)/120;
 }
 
+/* ================== Zoom 100% (aislado del swipe) ================== */
+let zoomAbierto = false, zoomURL = null, zoomPan = null;
+let zx = 0, zy = 0;
+
+function abrirZoom(){
+  if(zoomAbierto || pos >= cola.length) return;
+  const arch = archivos[orden[cola[pos]]];
+  zoomAbierto = true;
+  zoomURL = URL.createObjectURL(arch.file);
+  const img = $("imgZoom");
+  img.onload = ()=>{
+    // arranca centrado, a 100% de píxeles reales
+    zx = (window.innerWidth  - img.naturalWidth ) / 2;
+    zy = (window.innerHeight - img.naturalHeight) / 2;
+    aplicarZoom();
+  };
+  img.onerror = ()=>{ toast("No se pudo abrir en grande"); cerrarZoom(); };
+  img.src = zoomURL;
+  $("capaZoom").classList.add("abierta");
+}
+function aplicarZoom(){
+  $("imgZoom").style.transform = "translate(" + zx + "px, " + zy + "px)";
+}
+function cerrarZoom(){
+  if(!zoomAbierto) return;
+  zoomAbierto = false;
+  zoomPan = null;
+  $("capaZoom").classList.remove("abierta");
+  const img = $("imgZoom");
+  img.onload = null;
+  img.removeAttribute("src");
+  if(zoomURL){ URL.revokeObjectURL(zoomURL); zoomURL = null; }  // libera la memoria grande
+}
+$("btnZoom").addEventListener("click", e=>{ e.stopPropagation(); abrirZoom(); });
+$("salirZoom").addEventListener("click", e=>{ e.stopPropagation(); cerrarZoom(); });
+
+/* Arrastre para recorrer la foto ampliada */
+const capaZ = $("capaZoom");
+capaZ.addEventListener("pointerdown", e=>{
+  if(e.target.id === "salirZoom") return;
+  zoomPan = {x0: e.clientX - zx, y0: e.clientY - zy};
+  capaZ.setPointerCapture(e.pointerId);
+});
+capaZ.addEventListener("pointermove", e=>{
+  if(!zoomPan) return;
+  zx = e.clientX - zoomPan.x0;
+  zy = e.clientY - zoomPan.y0;
+  aplicarZoom();
+});
+capaZ.addEventListener("pointerup", ()=>{ zoomPan = null; });
+capaZ.addEventListener("pointercancel", ()=>{ zoomPan = null; });
+
+/* Doble toque: en la foto entra al zoom, en el zoom sale */
+function dobleTap(fn){
+  let ultimo = 0;
+  return e=>{
+    const ahora = Date.now();
+    if(ahora - ultimo < 320){ ultimo = 0; fn(e); }
+    else ultimo = ahora;
+  };
+}
+capaZ.addEventListener("pointerup", dobleTap(cerrarZoom));
+tarjeta.addEventListener("pointerup", dobleTap(()=>{
+  // solo si el gesto fue un toque, no un arrastre
+  if(ultimoDesplazamiento < 12) abrirZoom();
+}));
+
+/* ================== Bloqueo de pantalla ================== */
+let wakeLock = null;
+async function pedirWakeLock(){
+  try{
+    if("wakeLock" in navigator && !wakeLock){
+      wakeLock = await navigator.wakeLock.request("screen");
+      wakeLock.addEventListener("release", ()=>{ wakeLock = null; });
+    }
+  }catch(err){/* si el sistema lo niega, seguimos igual */}
+}
+async function soltarWakeLock(){
+  try{ if(wakeLock) await wakeLock.release(); }catch(err){}
+  wakeLock = null;
+}
+/* iOS lo corta al cambiar de app: lo repedimos al volver */
+document.addEventListener("visibilitychange", ()=>{
+  if(document.visibilityState === "visible" && $("cull").classList.contains("activa"))
+    pedirWakeLock();
+});
+
 /* ================== Teclado y botones ================== */
 document.addEventListener("keydown", e=>{
   if(!$("cull").classList.contains("activa")) return;
+  if(e.key === " " || e.code === "Space"){
+    e.preventDefault();
+    zoomAbierto ? cerrarZoom() : abrirZoom();
+    return;
+  }
+  if(e.key === "Escape"){ if(zoomAbierto){ e.preventDefault(); cerrarZoom(); } return; }
+  if(zoomAbierto) return;   // con el zoom abierto no se decide sin querer
   if(e.key==="ArrowRight"){ e.preventDefault(); decidir("si"); }
   else if(e.key==="ArrowLeft"){ e.preventDefault(); decidir("no"); }
   else if(e.key==="ArrowUp"){ e.preventDefault(); decidir("duda"); }
