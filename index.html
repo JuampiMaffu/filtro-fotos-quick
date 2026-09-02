@@ -146,6 +146,11 @@
     translate:-50% 0;background:rgba(5,10,36,.85);color:var(--gris);
     font-size:12.5px;padding:7px 14px;border-radius:10px;white-space:nowrap;z-index:2;
   }
+  #nivelZoom{
+    position:absolute;top:calc(16px + env(safe-area-inset-top));left:16px;
+    background:rgba(5,10,36,.85);color:var(--oro);font-weight:800;font-size:13px;
+    padding:8px 13px;border-radius:10px;z-index:2;
+  }
   #btnZoom{
     position:absolute;bottom:10px;right:10px;z-index:6;
     background:rgba(5,10,36,.72);color:var(--blanco);
@@ -338,7 +343,8 @@
   <div id="capaZoom">
     <img id="imgZoom" alt="">
     <button id="salirZoom">✕ Cerrar</button>
-    <div id="avisoZoom">Arrastrá para moverte · doble toque para salir</div>
+    <div id="avisoZoom">Pellizcá para acercar · arrastrá para moverte</div>
+    <div id="nivelZoom">100%</div>
   </div>
 
   <div class="barraInf">
@@ -846,11 +852,9 @@ function mostrarSello(d, fuerza){
 
 /* ================== Arrastre (swipe) ================== */
 let drag = null;
-let ultimoDesplazamiento = 0;
 const tarjeta = $("tarjeta");
 tarjeta.addEventListener("pointerdown", e=>{
   if(pos >= cola.length || zoomAbierto) return;
-  ultimoDesplazamiento = 0;
   drag = {x0:e.clientX, y0:e.clientY, dx:0, dy:0};
   tarjeta.setPointerCapture(e.pointerId);
   tarjeta.classList.add("arrastrando");
@@ -860,7 +864,6 @@ tarjeta.addEventListener("pointermove", e=>{
   if(!drag) return;
   drag.dx = e.clientX - drag.x0;
   drag.dy = e.clientY - drag.y0;
-  ultimoDesplazamiento = Math.max(ultimoDesplazamiento, Math.abs(drag.dx), Math.abs(drag.dy));
   tarjeta.style.transform = `translate(${drag.dx}px, ${drag.dy}px) rotate(${drag.dx*0.04}deg)`;
   const d = direccionDe(drag);
   mostrarSello(d, d ? Math.min(1, intensidadDe(drag)) : 0);
@@ -892,9 +895,11 @@ function intensidadDe(g){
   return Math.abs(g.dx)/120;
 }
 
-/* ================== Zoom 100% (aislado del swipe) ================== */
-let zoomAbierto = false, zoomURL = null, zoomPan = null;
-let zx = 0, zy = 0;
+/* ================== Zoom (se abre SOLO con la lupa) ================== */
+let zoomAbierto = false, zoomURL = null;
+let zEsc = 1, zMin = 1, zx = 0, zy = 0;
+const punteros = new Map();
+let gesto = null;
 
 function abrirZoom(){
   if(zoomAbierto || pos >= cola.length) return;
@@ -903,61 +908,116 @@ function abrirZoom(){
   zoomURL = URL.createObjectURL(arch.file);
   const img = $("imgZoom");
   img.onload = ()=>{
-    // arranca centrado, a 100% de píxeles reales
-    zx = (window.innerWidth  - img.naturalWidth ) / 2;
-    zy = (window.innerHeight - img.naturalHeight) / 2;
+    const vw = window.innerWidth, vh = window.innerHeight;
+    img.style.width  = img.naturalWidth + "px";
+    img.style.height = img.naturalHeight + "px";
+    // arranca mostrando la foto entera, como la galería
+    zMin = Math.min(vw / img.naturalWidth, vh / img.naturalHeight);
+    zEsc = zMin;
+    zx = (vw - img.naturalWidth  * zEsc) / 2;
+    zy = (vh - img.naturalHeight * zEsc) / 2;
     aplicarZoom();
   };
   img.onerror = ()=>{ toast("No se pudo abrir en grande"); cerrarZoom(); };
   img.src = zoomURL;
   $("capaZoom").classList.add("abierta");
 }
+
 function aplicarZoom(){
-  $("imgZoom").style.transform = "translate(" + zx + "px, " + zy + "px)";
+  const img = $("imgZoom");
+  const vw = window.innerWidth, vh = window.innerHeight;
+  const aw = img.naturalWidth * zEsc, ah = img.naturalHeight * zEsc;
+  // si entra en pantalla queda centrada; si no, se limita a no despegarse del borde
+  zx = aw <= vw ? (vw - aw) / 2 : Math.min(0, Math.max(vw - aw, zx));
+  zy = ah <= vh ? (vh - ah) / 2 : Math.min(0, Math.max(vh - ah, zy));
+  img.style.transform = "translate(" + zx + "px, " + zy + "px) scale(" + zEsc + ")";
+  $("nivelZoom").textContent = Math.round(zEsc * 100) + "%";
 }
+
+function escalarEn(nuevaEsc, cx, cy){
+  const tope = Math.max(1, zMin) * 6;
+  nuevaEsc = Math.min(tope, Math.max(zMin * 0.9, nuevaEsc));
+  const k = nuevaEsc / zEsc;
+  zx = cx - k * (cx - zx);
+  zy = cy - k * (cy - zy);
+  zEsc = nuevaEsc;
+  aplicarZoom();
+}
+
 function cerrarZoom(){
   if(!zoomAbierto) return;
   zoomAbierto = false;
-  zoomPan = null;
+  punteros.clear(); gesto = null;
   $("capaZoom").classList.remove("abierta");
   const img = $("imgZoom");
   img.onload = null;
   img.removeAttribute("src");
+  img.style.width = img.style.height = "";
   if(zoomURL){ URL.revokeObjectURL(zoomURL); zoomURL = null; }  // libera la memoria grande
 }
+
 $("btnZoom").addEventListener("click", e=>{ e.stopPropagation(); abrirZoom(); });
 $("salirZoom").addEventListener("click", e=>{ e.stopPropagation(); cerrarZoom(); });
 
-/* Arrastre para recorrer la foto ampliada */
+/* Un dedo: mover · Dos dedos: pellizcar para acercar o alejar */
 const capaZ = $("capaZoom");
-capaZ.addEventListener("pointerdown", e=>{
-  if(e.target.id === "salirZoom") return;
-  zoomPan = {x0: e.clientX - zx, y0: e.clientY - zy};
-  capaZ.setPointerCapture(e.pointerId);
-});
-capaZ.addEventListener("pointermove", e=>{
-  if(!zoomPan) return;
-  zx = e.clientX - zoomPan.x0;
-  zy = e.clientY - zoomPan.y0;
-  aplicarZoom();
-});
-capaZ.addEventListener("pointerup", ()=>{ zoomPan = null; });
-capaZ.addEventListener("pointercancel", ()=>{ zoomPan = null; });
-
-/* Doble toque: en la foto entra al zoom, en el zoom sale */
-function dobleTap(fn){
-  let ultimo = 0;
-  return e=>{
-    const ahora = Date.now();
-    if(ahora - ultimo < 320){ ultimo = 0; fn(e); }
-    else ultimo = ahora;
+function centroYDist(){
+  const p = [...punteros.values()];
+  if(p.length < 2) return null;
+  return {
+    cx: (p[0].x + p[1].x) / 2,
+    cy: (p[0].y + p[1].y) / 2,
+    d: Math.hypot(p[0].x - p[1].x, p[0].y - p[1].y)
   };
 }
-capaZ.addEventListener("pointerup", dobleTap(cerrarZoom));
-tarjeta.addEventListener("pointerup", dobleTap(()=>{
-  // solo si el gesto fue un toque, no un arrastre
-  if(ultimoDesplazamiento < 12) abrirZoom();
-}));
+capaZ.addEventListener("pointerdown", e=>{
+  if(e.target.id === "salirZoom") return;
+  capaZ.setPointerCapture(e.pointerId);
+  punteros.set(e.pointerId, {x:e.clientX, y:e.clientY});
+  const c = centroYDist();
+  gesto = c ? {tipo:"pinza", d:c.d, cx:c.cx, cy:c.cy, esc:zEsc}
+            : {tipo:"mover", x:e.clientX - zx, y:e.clientY - zy};
+});
+capaZ.addEventListener("pointermove", e=>{
+  if(!punteros.has(e.pointerId)) return;
+  punteros.set(e.pointerId, {x:e.clientX, y:e.clientY});
+  if(!gesto) return;
+  if(gesto.tipo === "pinza"){
+    const c = centroYDist();
+    if(!c || !gesto.d) return;
+    // el pellizco escala, y el centro moviéndose arrastra la foto
+    zx += c.cx - gesto.cx;
+    zy += c.cy - gesto.cy;
+    gesto.cx = c.cx; gesto.cy = c.cy;
+    escalarEn(gesto.esc * (c.d / gesto.d), c.cx, c.cy);
+  }else{
+    zx = e.clientX - gesto.x;
+    zy = e.clientY - gesto.y;
+    aplicarZoom();
+  }
+});
+function soltarZoom(e){
+  punteros.delete(e.pointerId);
+  if(punteros.size === 1){
+    const [id, p] = [...punteros.entries()][0];
+    gesto = {tipo:"mover", x:p.x - zx, y:p.y - zy};   // queda un dedo: sigue moviendo
+  }else if(punteros.size === 0){
+    gesto = null;
+    if(zEsc < zMin){ zEsc = zMin; aplicarZoom(); }    // se pasó de alejar: vuelve solo
+  }else{
+    const c = centroYDist();
+    if(c) gesto = {tipo:"pinza", d:c.d, cx:c.cx, cy:c.cy, esc:zEsc};
+  }
+}
+capaZ.addEventListener("pointerup", soltarZoom);
+capaZ.addEventListener("pointercancel", soltarZoom);
+
+/* En la compu: rueda del mouse para acercar */
+capaZ.addEventListener("wheel", e=>{
+  if(!zoomAbierto) return;
+  e.preventDefault();
+  escalarEn(zEsc * (e.deltaY < 0 ? 1.15 : 0.87), e.clientX, e.clientY);
+}, {passive:false});
 
 /* ================== Bloqueo de pantalla ================== */
 let wakeLock = null;
