@@ -368,6 +368,7 @@
 
   <div class="acciones">
     <button id="btnAtajo" class="btnPrimario" style="display:none">Compartir lista para el Atajo</button>
+    <button id="btnDescargas" class="btnPrimario" style="display:none">Guardar elegidas en Descargas</button>
     <div id="filaLista" style="display:none;flex-direction:column;gap:12px">
       <button id="btnListaCopiar" class="btnSecundario">Copiar lista al portapapeles</button>
       <button id="btnListaTxt" class="btnSecundario">Descargar lista (seleccionadas.txt)</button>
@@ -511,6 +512,7 @@ const esIOS = /iP(hone|od|ad)/.test(navigator.userAgent) ||
               (navigator.userAgent.includes("Mac") && navigator.maxTouchPoints > 1);
 /* Ventana de precarga según el equipo, no según la marca: un Samsung de gama media
    no es una PC aunque tampoco sea iPhone */
+const esAndroid = !esIOS && /Android/i.test(navigator.userAgent);
 const esTactil = esIOS || (window.matchMedia && matchMedia("(pointer:coarse)").matches);
 const memGB    = navigator.deviceMemory || (esIOS ? 6 : (esTactil ? 4 : 8));
 const PRE_ADELANTE = esTactil ? (memGB <= 4 ? 2 : 3) : 4;
@@ -1321,13 +1323,14 @@ function irAFinal(){
   $("finDuda").textContent = fmt(c.duda);
   $("franjaFill").style.width = "100%";
   $("btnRepaso").style.display = c.duda ? "" : "none";
-  $("btnCopiar").style.display = (!esIOS && window.showDirectoryPicker) ? "" : "none";
-  $("btnBat").style.display = esIOS ? "none" : "";
+  $("btnCopiar").style.display = (!esIOS && !esAndroid && window.showDirectoryPicker) ? "" : "none";
+  $("btnBat").style.display = (esIOS || esAndroid) ? "none" : "";
   $("btnAtajo").style.display = (esIOS && navigator.share) ? "" : "none";
   $("filaLista").style.display = esIOS ? "flex" : "none";
-  $("rotuloCompu").style.display = esIOS ? "" : "none";
-  $("btnCompartir").style.display = (esIOS && navigator.share) ? "" : "none";
-  $("btnCompartir").className = esIOS ? "btnSecundario" : "btnPrimario";
+  $("rotuloCompu").style.display = (esIOS || esAndroid) ? "" : "none";
+  $("btnCompartir").style.display = ((esIOS || esAndroid) && navigator.share) ? "" : "none";
+  $("btnCompartir").className = (esIOS || esAndroid) ? "btnSecundario" : "btnPrimario";
+  $("btnDescargas").style.display = esAndroid ? "" : "none";
   $("estadoCopia").style.display = "none";
   $("explicBat").style.display = "none";
   cambiarPantalla("final");
@@ -1437,6 +1440,62 @@ $("btnBat").addEventListener("click", ()=>{
   l.push("pause");
   descargarTexto("copiar.bat", l.join("\r\n"));
   $("explicBat").style.display = "block";
+});
+
+/* --- Android: guardar las elegidas en la carpeta Descargas del teléfono ---
+   Todo local: el navegador escribe los archivos en el almacenamiento del equipo,
+   no hay ninguna subida a internet. Solo se activa en Android. */
+let bajando = false, cortarBajada = false, bajadasHechas = 0;
+
+function bajarArchivo(file, nombre){
+  return new Promise(res=>{
+    const u = URL.createObjectURL(file);
+    const a = document.createElement("a");
+    a.href = u; a.download = nombre; a.rel = "noopener";
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>{ URL.revokeObjectURL(u); res(); }, 400);   // se suelta ya: nunca hay dos en memoria
+  });
+}
+
+$("btnDescargas").addEventListener("click", async ()=>{
+  const btn = $("btnDescargas"), est = $("estadoCopia");
+  if(bajando){ cortarBajada = true; est.textContent = "Cancelando…"; return; }
+
+  const van = archivos.filter(a=>decisiones[a.clave]==="si");
+  const c = contarDecisiones();
+  if(!van.length){ toast("No hay fotos elegidas todavía"); return; }
+  if(c.duda && !confirm("Tenés " + fmt(c.duda) + " dudosas sin resolver. Se bajan SOLO las elegidas.\n\nMejor tocá \"Repasar las dudosas\" primero. ¿Bajar igual?")) return;
+
+  let desde = 0;
+  if(bajadasHechas > 0 && bajadasHechas < van.length){
+    desde = confirm("La vez pasada llegaste hasta la " + fmt(bajadasHechas) + ".\n\nAceptar = seguir desde ahí.\nCancelar = empezar de nuevo desde la primera.")
+      ? bajadasHechas : 0;
+  }
+  if(!confirm("Se van a guardar " + fmt(van.length - desde) + " fotos en la carpeta Descargas del teléfono.\n\nChrome te va a pedir permiso una vez para guardar varios archivos: tocá Permitir.\n\nQuedate en esta pantalla hasta que termine. ¿Empezamos?")) return;
+
+  bajando = true; cortarBajada = false;
+  btn.textContent = "Cancelar";
+  est.style.display = "block";
+  let i = desde;
+  try{
+    for(; i < van.length; i++){
+      if(cortarBajada) break;
+      est.textContent = "Guardando " + fmt(i+1) + " / " + fmt(van.length) + "…";
+      await bajarArchivo(van[i].file, van[i].nombre);
+      await new Promise(r=>setTimeout(r, 350));   // sin pausa Chrome corta la tanda
+    }
+  }catch(err){
+    est.textContent = "Se cortó en la " + fmt(i+1) + ". Tocá de nuevo para seguir desde ahí.";
+  }
+  bajando = false;
+  bajadasHechas = i;
+  btn.textContent = "Guardar elegidas en Descargas";
+  if(cortarBajada)
+    est.textContent = "Cancelado en la " + fmt(i) + " de " + fmt(van.length) + ". Tocá de nuevo para seguir desde ahí.";
+  else if(i >= van.length){
+    est.textContent = "Listo: " + fmt(van.length) + " fotos en la carpeta Descargas del teléfono.";
+    bajadasHechas = 0;
+  }
 });
 
 /* --- Respaldo JSON --- */
