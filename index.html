@@ -368,7 +368,7 @@
 
   <div class="acciones">
     <button id="btnAtajo" class="btnPrimario" style="display:none">Compartir lista para el Atajo</button>
-    <button id="btnDescargas" class="btnPrimario" style="display:none">Guardar elegidas en Descargas</button>
+    <button id="btnDescargas" class="btnPrimario" style="display:none">Guardar elegidas en Descargas (ZIP)</button>
     <div id="filaLista" style="display:none;flex-direction:column;gap:12px">
       <button id="btnListaCopiar" class="btnSecundario">Copiar lista al portapapeles</button>
       <button id="btnListaTxt" class="btnSecundario">Descargar lista (seleccionadas.txt)</button>
@@ -1442,60 +1442,237 @@ $("btnBat").addEventListener("click", ()=>{
   $("explicBat").style.display = "block";
 });
 
-/* --- Android: guardar las elegidas en la carpeta Descargas del teléfono ---
-   Todo local: el navegador escribe los archivos en el almacenamiento del equipo,
-   no hay ninguna subida a internet. Solo se activa en Android. */
-let bajando = false, cortarBajada = false, bajadasHechas = 0;
+/* --- Android: un único ZIP con las elegidas, a la carpeta Descargas ---
+   Chrome bloquea las descargas seguidas disparadas por código, así que va todo
+   en un solo archivo: un toque, un permiso. Sin comprimir (los JPEG ya lo están),
+   lo que permite armarlo sin cargar las fotos en memoria. Todo local. */
 
-function bajarArchivo(file, nombre){
-  return new Promise(res=>{
-    const u = URL.createObjectURL(file);
-    const a = document.createElement("a");
-    a.href = u; a.download = nombre; a.rel = "noopener";
-    document.body.appendChild(a); a.click(); a.remove();
-    setTimeout(()=>{ URL.revokeObjectURL(u); res(); }, 400);   // se suelta ya: nunca hay dos en memoria
-  });
+/* Escritor de ZIP sin compresión (método STORE) con soporte ZIP64.
+   Los JPEG ya vienen comprimidos: comprimir de nuevo no achica y quema CPU.
+   STORE permite además armar el archivo sin cargar las fotos en memoria. */
+
+const TABLA_CRC = (()=>{
+  const t = new Uint32Array(256);
+  for(let i=0;i<256;i++){
+    let c = i;
+    for(let k=0;k<8;k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+    t[i] = c >>> 0;
+  }
+  return t;
+})();
+
+function crc32Trozo(bytes, previo){
+  let c = (previo ^ 0xFFFFFFFF) >>> 0;
+  for(let i=0;i<bytes.length;i++) c = (TABLA_CRC[(c ^ bytes[i]) & 0xFF] ^ (c >>> 8)) >>> 0;
+  return (c ^ 0xFFFFFFFF) >>> 0;
+}
+
+function fechaDOS(ms){
+  const d = new Date(ms);
+  const a = Math.min(127, Math.max(0, d.getFullYear() - 1980));
+  const fecha = (a << 9) | ((d.getMonth()+1) << 5) | d.getDate();
+  const hora  = (d.getHours() << 11) | (d.getMinutes() << 5) | (d.getSeconds() >> 1);
+  return {fecha, hora};
+}
+
+function bytesNombre(nombre){
+  return new TextEncoder().encode(nombre);
+}
+
+const MAX32 = 0xFFFFFFFF;
+
+/* Cabecera local: va justo antes de los bytes de cada foto */
+function cabeceraLocal(e){
+  const nom = bytesNombre(e.nombre);
+  const zip64 = e.tam >= MAX32 || e.offset >= MAX32;
+  const extra = zip64 ? 20 : 0;
+  const b = new Uint8Array(30 + nom.length + extra);
+  const v = new DataView(b.buffer);
+  const {fecha, hora} = fechaDOS(e.mtime);
+  v.setUint32(0, 0x04034b50, true);
+  v.setUint16(4, zip64 ? 45 : 20, true);   // versión necesaria
+  v.setUint16(6, 0x0800, true);            // nombre en UTF-8
+  v.setUint16(8, 0, true);                 // método: sin compresión
+  v.setUint16(10, hora, true);
+  v.setUint16(12, fecha, true);
+  v.setUint32(14, e.crc, true);
+  v.setUint32(18, zip64 ? MAX32 : e.tam, true);
+  v.setUint32(22, zip64 ? MAX32 : e.tam, true);
+  v.setUint16(26, nom.length, true);
+  v.setUint16(28, extra, true);
+  b.set(nom, 30);
+  if(zip64){
+    const w = new DataView(b.buffer, 30 + nom.length);
+    w.setUint16(0, 0x0001, true);
+    w.setUint16(2, 16, true);
+    w.setBigUint64(4, BigInt(e.tam), true);
+    w.setBigUint64(12, BigInt(e.tam), true);
+  }
+  return b;
+}
+
+/* Entrada del índice final (directorio central) */
+function entradaCentral(e){
+  const nom = bytesNombre(e.nombre);
+  const necesitaTam = e.tam >= MAX32, necesitaOff = e.offset >= MAX32;
+  const zip64 = necesitaTam || necesitaOff;
+  const extra = zip64 ? (4 + (necesitaTam ? 16 : 0) + (necesitaOff ? 8 : 0)) : 0;
+  const b = new Uint8Array(46 + nom.length + extra);
+  const v = new DataView(b.buffer);
+  const {fecha, hora} = fechaDOS(e.mtime);
+  v.setUint32(0, 0x02014b50, true);
+  v.setUint16(4, 45, true);                // versión con la que se creó
+  v.setUint16(6, zip64 ? 45 : 20, true);
+  v.setUint16(8, 0x0800, true);
+  v.setUint16(10, 0, true);
+  v.setUint16(12, hora, true);
+  v.setUint16(14, fecha, true);
+  v.setUint32(16, e.crc, true);
+  v.setUint32(20, necesitaTam ? MAX32 : e.tam, true);
+  v.setUint32(24, necesitaTam ? MAX32 : e.tam, true);
+  v.setUint16(28, nom.length, true);
+  v.setUint16(30, extra, true);
+  v.setUint16(32, 0, true);                // sin comentario
+  v.setUint16(34, 0, true);                // disco 0
+  v.setUint16(36, 0, true);
+  v.setUint32(38, 0, true);
+  v.setUint32(42, necesitaOff ? MAX32 : e.offset, true);
+  b.set(nom, 46);
+  if(zip64){
+    const w = new DataView(b.buffer, 46 + nom.length);
+    w.setUint16(0, 0x0001, true);
+    w.setUint16(2, extra - 4, true);
+    let o = 4;
+    if(necesitaTam){ w.setBigUint64(o, BigInt(e.tam), true); o += 8;
+                     w.setBigUint64(o, BigInt(e.tam), true); o += 8; }
+    if(necesitaOff){ w.setBigUint64(o, BigInt(e.offset), true); }
+  }
+  return b;
+}
+
+/* Cierre del archivo: incluye la versión ZIP64 cuando hace falta */
+function cierre(n, tamCentral, offCentral){
+  const zip64 = n >= 0xFFFF || tamCentral >= MAX32 || offCentral >= MAX32;
+  const b = new Uint8Array((zip64 ? 56 + 20 : 0) + 22);
+  const v = new DataView(b.buffer);
+  let p = 0;
+  if(zip64){
+    v.setUint32(p, 0x06064b50, true);
+    v.setBigUint64(p+4, BigInt(44), true);       // tamaño de este registro
+    v.setUint16(p+12, 45, true);
+    v.setUint16(p+14, 45, true);
+    v.setUint32(p+16, 0, true);
+    v.setUint32(p+20, 0, true);
+    v.setBigUint64(p+24, BigInt(n), true);
+    v.setBigUint64(p+32, BigInt(n), true);
+    v.setBigUint64(p+40, BigInt(tamCentral), true);
+    v.setBigUint64(p+48, BigInt(offCentral), true);
+    p += 56;
+    v.setUint32(p, 0x07064b50, true);            // localizador
+    v.setUint32(p+4, 0, true);
+    v.setBigUint64(p+8, BigInt(offCentral + tamCentral), true);
+    v.setUint32(p+16, 1, true);
+    p += 20;
+  }
+  v.setUint32(p, 0x06054b50, true);
+  v.setUint16(p+4, 0, true);
+  v.setUint16(p+6, 0, true);
+  v.setUint16(p+8, zip64 ? 0xFFFF : n, true);
+  v.setUint16(p+10, zip64 ? 0xFFFF : n, true);
+  v.setUint32(p+12, zip64 ? MAX32 : tamCentral, true);
+  v.setUint32(p+16, zip64 ? MAX32 : offCentral, true);
+  v.setUint16(p+20, 0, true);
+  return b;
+}
+
+/* Nombres repetidos dentro del ZIP: el segundo lleva sufijo */
+function nombreUnico(nombre, usados){
+  if(!usados.has(nombre.toLowerCase())){ usados.add(nombre.toLowerCase()); return nombre; }
+  const punto = nombre.lastIndexOf(".");
+  const base = punto > 0 ? nombre.slice(0, punto) : nombre;
+  const ext  = punto > 0 ? nombre.slice(punto) : "";
+  let i = 2, cand;
+  do{ cand = base + "_" + i + ext; i++; }while(usados.has(cand.toLowerCase()));
+  usados.add(cand.toLowerCase());
+  return cand;
+}
+
+
+let armandoZip = false, cortarZip = false;
+
+/* CRC de una foto leyéndola de a pedazos: nunca entra entera en memoria */
+async function crcDeArchivo(file){
+  const PEDAZO = 4 * 1024 * 1024;
+  let crc = 0;
+  for(let o = 0; o < file.size; o += PEDAZO){
+    if(cortarZip) throw new Error("cancelado");
+    const buf = await file.slice(o, Math.min(o + PEDAZO, file.size)).arrayBuffer();
+    crc = crc32Trozo(new Uint8Array(buf), crc);
+  }
+  return crc;
 }
 
 $("btnDescargas").addEventListener("click", async ()=>{
   const btn = $("btnDescargas"), est = $("estadoCopia");
-  if(bajando){ cortarBajada = true; est.textContent = "Cancelando…"; return; }
+  if(armandoZip){ cortarZip = true; est.textContent = "Cancelando…"; return; }
 
   const van = archivos.filter(a=>decisiones[a.clave]==="si");
   const c = contarDecisiones();
   if(!van.length){ toast("No hay fotos elegidas todavía"); return; }
-  if(c.duda && !confirm("Tenés " + fmt(c.duda) + " dudosas sin resolver. Se bajan SOLO las elegidas.\n\nMejor tocá \"Repasar las dudosas\" primero. ¿Bajar igual?")) return;
+  if(c.duda && !confirm("Tenés " + fmt(c.duda) + " dudosas sin resolver. Se guardan SOLO las elegidas.\n\nMejor tocá \"Repasar las dudosas\" primero. ¿Seguir igual?")) return;
 
-  let desde = 0;
-  if(bajadasHechas > 0 && bajadasHechas < van.length){
-    desde = confirm("La vez pasada llegaste hasta la " + fmt(bajadasHechas) + ".\n\nAceptar = seguir desde ahí.\nCancelar = empezar de nuevo desde la primera.")
-      ? bajadasHechas : 0;
-  }
-  if(!confirm("Se van a guardar " + fmt(van.length - desde) + " fotos en la carpeta Descargas del teléfono.\n\nChrome te va a pedir permiso una vez para guardar varios archivos: tocá Permitir.\n\nQuedate en esta pantalla hasta que termine. ¿Empezamos?")) return;
+  const totalBytes = van.reduce((t,a)=>t + a.file.size, 0);
+  const gb = totalBytes / 1073741824;
+  if(!confirm("Se va a armar UN archivo ZIP con " + fmt(van.length) + " fotos (" +
+      (gb >= 1 ? gb.toFixed(1) + " GB" : Math.round(totalBytes/1048576) + " MB") + ") en la carpeta Descargas.\n\n" +
+      "Es una sola descarga: un solo permiso.\n\nDejá la pantalla prendida hasta que termine. ¿Empezamos?")) return;
 
-  bajando = true; cortarBajada = false;
+  armandoZip = true; cortarZip = false;
   btn.textContent = "Cancelar";
   est.style.display = "block";
-  let i = desde;
+  await pedirWakeLock();
+
   try{
-    for(; i < van.length; i++){
-      if(cortarBajada) break;
-      est.textContent = "Guardando " + fmt(i+1) + " / " + fmt(van.length) + "…";
-      await bajarArchivo(van[i].file, van[i].nombre);
-      await new Promise(r=>setTimeout(r, 350));   // sin pausa Chrome corta la tanda
+    const partes = [], central = [], usados = new Set();
+    let off = 0, leidos = 0;
+    for(let i = 0; i < van.length; i++){
+      if(cortarZip) throw new Error("cancelado");
+      const a = van[i];
+      est.textContent = "Preparando " + fmt(i+1) + " / " + fmt(van.length) +
+        " · " + Math.round(leidos / totalBytes * 100) + "%";
+      const crc = await crcDeArchivo(a.file);
+      const e = {nombre: nombreUnico(a.nombre, usados), tam: a.file.size,
+                 crc, mtime: a.file.lastModified || Date.now(), offset: off};
+      const cab = cabeceraLocal(e);
+      partes.push(cab, a.file);       // el File va por referencia: no ocupa memoria
+      off += cab.length + a.file.size;
+      leidos += a.file.size;
+      central.push(e);
+      if(i % 10 === 0) await new Promise(r=>setTimeout(r, 0));   // que la pantalla respire
     }
+    est.textContent = "Cerrando el archivo…";
+    const offCentral = off;
+    let tamCentral = 0;
+    for(const e of central){ const ce = entradaCentral(e); partes.push(ce); tamCentral += ce.length; }
+    partes.push(cierre(central.length, tamCentral, offCentral));
+
+    const nombreZip = "SELECCIONADAS_" + new Date().toISOString().slice(0,10).replace(/-/g,"") + ".zip";
+    const blob = new Blob(partes, {type:"application/zip"});
+    const u = URL.createObjectURL(blob);
+    const enlace = document.createElement("a");
+    enlace.href = u; enlace.download = nombreZip;
+    document.body.appendChild(enlace); enlace.click(); enlace.remove();
+    setTimeout(()=>URL.revokeObjectURL(u), 120000);   // margen amplio: el ZIP es grande
+    est.textContent = "Listo: " + nombreZip + " con " + fmt(van.length) +
+      " fotos, en Descargas. Descomprimilo desde Mis Archivos.";
   }catch(err){
-    est.textContent = "Se cortó en la " + fmt(i+1) + ". Tocá de nuevo para seguir desde ahí.";
+    est.textContent = String(err && err.message) === "cancelado"
+      ? "Cancelado. No se guardó nada."
+      : "No se pudo armar el ZIP (" + (err && err.message) + "). Probá con menos fotos.";
   }
-  bajando = false;
-  bajadasHechas = i;
-  btn.textContent = "Guardar elegidas en Descargas";
-  if(cortarBajada)
-    est.textContent = "Cancelado en la " + fmt(i) + " de " + fmt(van.length) + ". Tocá de nuevo para seguir desde ahí.";
-  else if(i >= van.length){
-    est.textContent = "Listo: " + fmt(van.length) + " fotos en la carpeta Descargas del teléfono.";
-    bajadasHechas = 0;
-  }
+  soltarWakeLock();
+  armandoZip = false; cortarZip = false;
+  btn.textContent = "Guardar elegidas en Descargas (ZIP)";
 });
 
 /* --- Respaldo JSON --- */
