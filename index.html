@@ -152,6 +152,8 @@
     background:rgba(5,10,36,.85);color:var(--oro);font-weight:800;font-size:13px;
     padding:8px 13px;border-radius:10px;z-index:2;
   }
+  #enlaceZip{background:#2ECC71 !important;color:#062814 !important;
+    box-shadow:0 6px 0 rgba(0,0,0,.18), 0 10px 30px rgba(46,204,113,.3) !important}
   #btnZoom{
     position:absolute;bottom:10px;right:10px;z-index:6;
     background:rgba(5,10,36,.72);color:var(--blanco);
@@ -251,6 +253,7 @@
   .celda.cSi .num{color:var(--si)} .celda.cNo .num{color:var(--no)} .celda.cDuda .num{color:var(--duda)}
   .acciones{display:flex;flex-direction:column;gap:12px;width:min(440px,90vw)}
   .acciones .btnPrimario{font-size:17px;padding:16px 24px}
+  a.btnPrimario{display:block;box-sizing:border-box}
   #estadoCopia{display:none;color:var(--oro);font-weight:700}
   #explicBat{
     display:none;background:var(--azul-panel);border:1.5px solid var(--oro);
@@ -368,7 +371,8 @@
 
   <div class="acciones">
     <button id="btnAtajo" class="btnPrimario" style="display:none">Compartir lista para el Atajo</button>
-    <button id="btnDescargas" class="btnPrimario" style="display:none">Guardar elegidas en Descargas (ZIP)</button>
+    <button id="btnDescargas" class="btnPrimario" style="display:none">Preparar ZIP con las elegidas</button>
+    <a id="enlaceZip" class="btnPrimario" style="display:none;text-decoration:none;text-align:center" download>⬇ Guardar el ZIP</a>
     <div id="filaLista" style="display:none;flex-direction:column;gap:12px">
       <button id="btnListaCopiar" class="btnSecundario">Copiar lista al portapapeles</button>
       <button id="btnListaTxt" class="btnSecundario">Descargar lista (seleccionadas.txt)</button>
@@ -1331,6 +1335,7 @@ function irAFinal(){
   $("btnCompartir").style.display = ((esIOS || esAndroid) && navigator.share) ? "" : "none";
   $("btnCompartir").className = (esIOS || esAndroid) ? "btnSecundario" : "btnPrimario";
   $("btnDescargas").style.display = esAndroid ? "" : "none";
+  $("enlaceZip").style.display = "none";
   $("estadoCopia").style.display = "none";
   $("explicBat").style.display = "none";
   cambiarPantalla("final");
@@ -1658,13 +1663,20 @@ $("btnDescargas").addEventListener("click", async ()=>{
 
     const nombreZip = "SELECCIONADAS_" + new Date().toISOString().slice(0,10).replace(/-/g,"") + ".zip";
     const blob = new Blob(partes, {type:"application/zip"});
-    const u = URL.createObjectURL(blob);
-    const enlace = document.createElement("a");
-    enlace.href = u; enlace.download = nombreZip;
-    document.body.appendChild(enlace); enlace.click(); enlace.remove();
-    setTimeout(()=>URL.revokeObjectURL(u), 120000);   // margen amplio: el ZIP es grande
-    est.textContent = "Listo: " + nombreZip + " con " + fmt(van.length) +
-      " fotos, en Descargas. Descomprimilo desde Mis Archivos.";
+    /* Clave: NO disparamos la descarga por código. Armar el ZIP lleva segundos y para
+       entonces Chrome ya no considera que haya una acción del usuario, así que la
+       bloquea sin avisar. En su lugar dejamos un enlace real, y el toque de ella
+       sobre ese enlace es lo que descarga. Eso ningún navegador lo bloquea. */
+    const a = $("enlaceZip");
+    if(a.href && a.href.startsWith("blob:")) URL.revokeObjectURL(a.href);
+    a.href = URL.createObjectURL(blob);
+    a.download = nombreZip;
+    a.textContent = "⬇ Guardar " + nombreZip + " (" +
+      (blob.size >= 1073741824 ? (blob.size/1073741824).toFixed(1) + " GB"
+       : blob.size >= 1048576   ? Math.round(blob.size/1048576) + " MB"
+                                : Math.max(1, Math.round(blob.size/1024)) + " KB") + ")";
+    a.style.display = "block";
+    est.textContent = "ZIP listo con " + fmt(van.length) + " fotos. Ahora tocá el botón verde de abajo para guardarlo.";
   }catch(err){
     est.textContent = String(err && err.message) === "cancelado"
       ? "Cancelado. No se guardó nada."
@@ -1672,7 +1684,11 @@ $("btnDescargas").addEventListener("click", async ()=>{
   }
   soltarWakeLock();
   armandoZip = false; cortarZip = false;
-  btn.textContent = "Guardar elegidas en Descargas (ZIP)";
+  btn.textContent = "Preparar ZIP con las elegidas";
+});
+
+$("enlaceZip").addEventListener("click", ()=>{
+  $("estadoCopia").textContent = "Guardando en Descargas… puede tardar un rato si el ZIP es grande. Fijate en el ícono de descargas de Chrome.";
 });
 
 /* --- Respaldo JSON --- */
