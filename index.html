@@ -280,6 +280,74 @@
     .sello{font-size:30px;border-width:4px;top:16px}
     #escenario{padding:6px 8px}
   }
+  /* Tira fija: cinco casilleros, sin scroll ni animaciones. */
+  #tiraFotos{flex:none;display:grid;grid-template-columns:1fr 1fr 1.15fr 1fr 1fr;
+    align-items:center;gap:6px;width:min(460px,calc(100% - 24px));margin:4px auto 0;
+    height:104px;overflow:hidden;pointer-events:none}
+  .miniFoto{min-width:0;margin:0;text-align:center;color:var(--gris);font-size:11px}
+  .miniFoto canvas{display:block;width:100%;aspect-ratio:4/3;height:auto;
+    background:#050A24;border:2px solid var(--azul-borde);border-radius:8px}
+  .miniFoto.actual canvas{border-color:var(--oro)}
+  .miniFoto.actual{color:var(--oro);font-weight:800}
+  .miniFoto figcaption{height:16px;line-height:16px;white-space:nowrap}
+  .miniFoto.vacia{visibility:hidden}
+  .miniFoto[data-decision="si"] figcaption::before{content:"● ";color:var(--si)}
+  .miniFoto[data-decision="no"] figcaption::before{content:"● ";color:var(--no)}
+  .miniFoto[data-decision="duda"] figcaption::before{content:"● ";color:var(--duda)}
+  #foto{max-height:calc(100vh - 340px);max-height:calc(100dvh - 340px)}
+  #tarjeta.cargandoFoto{min-height:min(30vh,260px)}
+  @media(max-height:600px){
+    #tiraFotos{height:64px;width:min(310px,calc(100% - 24px))}
+    #foto{max-height:calc(100vh - 280px);max-height:calc(100dvh - 280px)}
+  }
+
+  /* En móvil la foto usa el espacio restante real del visor. */
+  @media (max-width:640px), (pointer:coarse){
+    #cull{top:max(6px,env(safe-area-inset-top))}
+    #cull .barraSup{flex:none;padding:3px 8px 2px;gap:6px;min-height:48px}
+    #cull .contador{gap:0}
+    #cull .contador .linea{font-size:17px}
+    #cull .contador small{font-size:11px}
+    #cull .contador .faltan{font-size:10px}
+    #cull .marcadores{gap:6px;font-size:11px}
+    #cull .marcadores span{gap:3px}
+    #cull .punto{width:6px;height:6px}
+    #cull .botonesSup{gap:4px}
+    #cull #btnTerminar,#cull #btnRespaldo{
+      min-height:44px;padding:4px 7px;font-size:11px;border-radius:8px}
+    #cull #btnRespaldo{min-width:44px}
+    #cull #btnRespaldo .corto{display:inline}
+    #cull #btnRespaldo .largo{display:none}
+    #cull #escenario{padding:2px 4px;container-type:size}
+    #cull #foto{
+      max-width:100%;max-height:calc(100dvh - 205px - env(safe-area-inset-bottom));
+      max-width:100cqw;max-height:100cqh}
+    #cull #tarjeta{border-radius:9px;box-shadow:none}
+    #cull #tarjeta.cargandoFoto{min-width:60%;min-height:min(180px,100cqh)}
+    #cull #nombreArchivo{font-size:10px;padding:3px 7px;bottom:6px}
+    #cull #btnZoom{font-size:11px;padding:4px 7px;min-height:44px;bottom:4px;right:5px}
+    #cull #tiraFotos{
+      grid-template-columns:1fr 1fr 1.5fr 1fr 1fr;
+      width:min(330px,calc(100% - 20px));height:76px;
+      gap:6px;margin:0 auto;align-items:center}
+    #cull .miniFoto{font-size:9px}
+    #cull .miniFoto canvas{border-width:1px;border-radius:5px}
+    #cull .miniFoto.actual canvas{border-width:2px;border-radius:7px}
+    #cull .miniFoto figcaption{height:13px;line-height:13px}
+    #cull .barraInf{flex:none;gap:7px;padding:3px 10px calc(5px + env(safe-area-inset-bottom))}
+    #cull .btnAccion,#cull #accSi{
+      min-width:0;min-height:44px;flex:1;max-width:112px;
+      padding:7px 10px;font-size:14px;border-width:2px;border-radius:10px;gap:0}
+    #cull .barraInf .tecla{display:none}
+    #cull #accUndo{min-width:62px;min-height:44px;padding:6px;font-size:11px;border-radius:9px}
+    #cull #accUndo br{display:none}
+  }
+  @media (max-height:500px) and (pointer:coarse){
+    #cull #tiraFotos{height:58px;width:250px}
+    #cull .barraSup{min-height:44px;padding-top:0;padding-bottom:0}
+    #cull .barraInf{padding-top:0;padding-bottom:env(safe-area-inset-bottom)}
+  }
+
 </style>
 </head>
 <body>
@@ -352,11 +420,18 @@
     <div id="nivelZoom">100%</div>
   </div>
 
+  <div id="tiraFotos" role="group" aria-label="Dos fotos anteriores, actual y dos siguientes">
+    <figure class="miniFoto vacia" id="mini0"><canvas width="160" height="120" aria-hidden="true"></canvas><figcaption></figcaption></figure>
+    <figure class="miniFoto vacia" id="mini1"><canvas width="160" height="120" aria-hidden="true"></canvas><figcaption></figcaption></figure>
+    <figure class="miniFoto actual vacia" id="mini2"><canvas width="160" height="120" aria-hidden="true"></canvas><figcaption></figcaption></figure>
+    <figure class="miniFoto vacia" id="mini3"><canvas width="160" height="120" aria-hidden="true"></canvas><figcaption></figcaption></figure>
+    <figure class="miniFoto vacia" id="mini4"><canvas width="160" height="120" aria-hidden="true"></canvas><figcaption></figcaption></figure>
+  </div>
   <div class="barraInf">
     <button id="accUndo" disabled>↩ Deshacer<br><span class="tecla">Z</span></button>
-    <button id="accNo" class="btnAccion">NO<span class="tecla">← izquierda</span></button>
-    <button id="accDuda" class="btnAccion">DUDA<span class="tecla">↑ arriba</span></button>
-    <button id="accSi" class="btnAccion">VA<span class="tecla">derecha →</span></button>
+    <button id="accNo" class="btnAccion">⬅️ NO<span class="tecla">← izquierda</span></button>
+    <button id="accDuda" class="btnAccion">⬆️ DUDA<span class="tecla">↑ arriba</span></button>
+    <button id="accSi" class="btnAccion">VA ➡️<span class="tecla">derecha →</span></button>
   </div>
 </section>
 
@@ -700,6 +775,7 @@ function mostrarAviso(msj){
 
 /* ================== Flujo principal ================== */
 function empezar(){
+  vaciarMiniaturas();
   modoRepaso = false;
   document.body.classList.remove("modoRepaso");
   cola = orden.map((_,i)=>i).filter(i => decisiones[archivos[orden[i]].clave] === undefined);
@@ -714,6 +790,7 @@ function empezar(){
 }
 
 function empezarRepaso(){
+  vaciarMiniaturas();
   modoRepaso = true;
   document.body.classList.add("modoRepaso");
   cola = orden.map((_,i)=>i).filter(i => decisiones[archivos[orden[i]].clave] === "duda");
@@ -762,6 +839,68 @@ function refrescar(){
   resetTarjeta();
   precargar();
   limpiarCache();
+  refrescarMiniaturas();
+}
+
+/* Miniaturas: se dibujan desde imágenes YA decodificadas por el visor/precarga.
+   No lee archivos, no crea URLs ni solicita previews adicionales.
+   Máximo cinco copias de 160x120; los cinco canvas visibles se reutilizan. */
+const miniCache = new Map();
+function indicesMini(){
+  return [-2,-1,0,1,2].map(k=>{
+    const p = pos + k;
+    return p >= 0 && p < cola.length ? cola[p] : null;
+  });
+}
+function vaciarMiniaturas(){
+  for(const c of miniCache.values()){ c.width = 0; c.height = 0; }
+  miniCache.clear();
+  for(let i=0;i<5;i++){
+    const el = $("mini"+i);
+    el.classList.add("vacia");
+    el.querySelector("canvas").getContext("2d").clearRect(0,0,160,120);
+    el.querySelector("figcaption").textContent = "";
+    el.removeAttribute("data-decision");
+  }
+}
+function guardarMiniatura(id, imagen){
+  if(!$("cull").classList.contains("activa") || miniCache.has(id) || !indicesMini().includes(id) ||
+     !imagen.complete || !imagen.naturalWidth) return;
+  const c = document.createElement("canvas");
+  c.width = 160; c.height = 120;
+  const ctx = c.getContext("2d");
+  if(!ctx) return;
+  const esc = Math.min(160/imagen.naturalWidth,120/imagen.naturalHeight);
+  const w = imagen.naturalWidth*esc, h = imagen.naturalHeight*esc;
+  ctx.drawImage(imagen,(160-w)/2,(120-h)/2,w,h);
+  miniCache.set(id,c);
+  pintarMiniaturas();
+}
+function pintarMiniaturas(){
+  const ids = indicesMini();
+  for(const [id,c] of miniCache){
+    if(!ids.includes(id)){c.width=0;c.height=0;miniCache.delete(id);}
+  }
+  ids.forEach((id,i)=>{
+    const el = $("mini"+i), c = el.querySelector("canvas"), ctx = c.getContext("2d");
+    ctx.clearRect(0,0,160,120);
+    el.classList.toggle("vacia",id === null);
+    const label = el.querySelector("figcaption");
+    if(id === null){ label.textContent="";el.removeAttribute("data-decision");return; }
+    const arch = archivos[orden[id]];
+    label.textContent = (i === 2 ? "Actual · " : "") + (id+1);
+    el.setAttribute("aria-label", (i===2 ? "Foto actual: " : "Foto: ") + arch.nombre);
+    el.setAttribute("data-decision",decisiones[arch.clave] || "");
+    if(miniCache.has(id)) ctx.drawImage(miniCache.get(id),0,0);
+  });
+}
+function refrescarMiniaturas(){
+  pintarMiniaturas();
+  for(const id of indicesMini()){
+    if(id === null) continue;
+    const im = cachePre.get(id);
+    if(im) guardarMiniatura(id,im);
+  }
 }
 
 /* ================== Carga de la foto en pantalla ================== */
@@ -781,6 +920,7 @@ function mostrarFoto(idxOrden, arch){
     ocultarSpin();
     t.classList.remove("cargandoFoto");
     img.style.visibility = "visible";
+    guardarMiniatura(idxOrden, img);
   };
   img.onerror = ()=>{
     if(tok !== cargaToken) return;
@@ -1019,8 +1159,10 @@ function precargar(){
         if(!u || !cachePre.has(id)) return;
         const im = new Image();               // decodifica el preview chico para que el swipe no espere
         im.decoding = "async";
+        im.onload = ()=>{ if(cachePre.get(id) === im) guardarMiniatura(id, im); };
         im.src = u;
         cachePre.set(id, im);
+        guardarMiniatura(id, im);
       });
     }
   }
@@ -1329,6 +1471,7 @@ $("btnTerminar").addEventListener("click", irAFinal);
 
 /* ================== Pantalla final ================== */
 function irAFinal(){
+  vaciarMiniaturas();
   flushGuardar();
   clearTimeout(spinTimer);
   ocultarSpin();
