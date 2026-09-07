@@ -302,6 +302,54 @@
     #tiraFotos{height:64px;width:min(310px,calc(100% - 24px))}
     #foto{max-height:calc(100vh - 280px);max-height:calc(100dvh - 280px)}
   }
+
+  /* Prueba v3: en móvil la foto usa el espacio restante real del visor. */
+  @media (max-width:640px), (pointer:coarse){
+    #cull{top:max(6px,env(safe-area-inset-top))}
+    #cull .barraSup{flex:none;padding:3px 8px 2px;gap:6px;min-height:48px}
+    #cull .contador{gap:0}
+    #cull .contador .linea{font-size:17px}
+    #cull .contador small{font-size:11px}
+    #cull .contador .faltan{font-size:10px}
+    #cull .marcadores{gap:6px;font-size:11px}
+    #cull .marcadores span{gap:3px}
+    #cull .punto{width:6px;height:6px}
+    #cull .botonesSup{gap:4px}
+    #cull #btnTerminar,#cull #btnRespaldo{
+      min-height:44px;padding:4px 7px;font-size:11px;border-radius:8px}
+    #cull #btnRespaldo{min-width:44px}
+    #cull #btnRespaldo .corto{display:inline}
+    #cull #btnRespaldo .largo{display:none}
+    #cull #escenario{padding:2px 4px;container-type:size}
+    #cull #foto{
+      max-width:100%;max-height:calc(100dvh - 205px - env(safe-area-inset-bottom));
+      max-width:100cqw;max-height:100cqh}
+    #cull #tarjeta{border-radius:9px;box-shadow:none}
+    #cull #tarjeta.cargandoFoto{min-width:60%;min-height:min(180px,100cqh)}
+    #cull #nombreArchivo{font-size:10px;padding:3px 7px;bottom:6px}
+    #cull #btnZoom{font-size:11px;padding:4px 7px;min-height:44px;bottom:4px;right:5px}
+    #cull #tiraFotos{
+      grid-template-columns:1fr 1fr 1.5fr 1fr 1fr;
+      width:min(330px,calc(100% - 20px));height:76px;
+      gap:6px;margin:0 auto;align-items:center}
+    #cull .miniFoto{font-size:9px}
+    #cull .miniFoto canvas{border-width:1px;border-radius:5px}
+    #cull .miniFoto.actual canvas{border-width:2px;border-radius:7px}
+    #cull .miniFoto figcaption{height:13px;line-height:13px}
+    #cull .barraInf{flex:none;gap:7px;padding:3px 10px calc(5px + env(safe-area-inset-bottom))}
+    #cull .btnAccion,#cull #accSi{
+      min-width:0;min-height:44px;flex:1;max-width:112px;
+      padding:7px 10px;font-size:14px;border-width:2px;border-radius:10px;gap:0}
+    #cull .barraInf .tecla{display:none}
+    #cull #accUndo{min-width:62px;min-height:44px;padding:6px;font-size:11px;border-radius:9px}
+    #cull #accUndo br{display:none}
+  }
+  @media (max-height:500px) and (pointer:coarse){
+    #cull #tiraFotos{height:58px;width:250px}
+    #cull .barraSup{min-height:44px;padding-top:0;padding-bottom:0}
+    #cull .barraInf{padding-top:0;padding-bottom:env(safe-area-inset-bottom)}
+  }
+
 </style>
 </head>
 <body>
@@ -313,7 +361,7 @@
   <div class="marca">
     <div class="titulo">Filtro <em>12:51</em></div>
     <div class="bandaOro"></div>
-    <div class="bajada"><strong style="color:var(--oro)">PRUEBA DE MINIATURAS · v2</strong><br>Dos fotos anteriores y dos siguientes, con la actual resaltada. Guardado de prueba separado.</div>
+    <div class="bajada"><strong style="color:var(--oro)">PRUEBA DE MINIATURAS · v3</strong><br>Visor más amplio y controles compactos. Guardado de prueba separado.</div>
   </div>
 
   <div id="aviso"></div>
