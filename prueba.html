@@ -1,0 +1,1789 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#0A1440">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Filtro 12:51 — Prueba de carpetas</title>
+<meta name="robots" content="noindex,nofollow">
+<style>
+  :root{
+    --azul-noche:#0A1440;
+    --azul-boca:#12266B;
+    --azul-panel:#16307F;
+    --azul-borde:#2A4AA8;
+    --oro:#FFD100;
+    --oro-hot:#FFB800;
+    --blanco:#F5F7FF;
+    --gris:#9AA6D0;
+    --si:#2ECC71;
+    --no:#FF4D5E;
+    --duda:#FFD100;
+    --radio:14px;
+    --display:900 1em/1 "Segoe UI","Arial Black",system-ui,sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    background:var(--azul-noche);
+    color:var(--blanco);
+    font-family:"Segoe UI",system-ui,-apple-system,sans-serif;
+    overflow:hidden;
+    overscroll-behavior:none;
+    -webkit-user-select:none;user-select:none;
+    -webkit-touch-callout:none;
+  }
+  button{font-family:inherit;cursor:pointer;border:none;border-radius:var(--radio);touch-action:manipulation}
+  button:focus-visible{outline:3px solid var(--oro);outline-offset:2px}
+
+  /* ===== La franja: barra de progreso ===== */
+  #franja{
+    position:fixed;top:0;left:0;right:0;height:10px;
+    background:var(--azul-boca);z-index:50;
+  }
+  #franjaFill{
+    height:100%;width:0%;
+    background:linear-gradient(90deg,var(--oro-hot),var(--oro));
+    transition:width .25s ease;
+    box-shadow:0 0 12px rgba(255,209,0,.55);
+  }
+
+  .pantalla{
+    position:fixed;inset:0;top:10px;
+    display:none;flex-direction:column;align-items:center;justify-content:center;
+    padding:24px;
+  }
+  .pantalla.activa{display:flex}
+
+  /* ===== Landing ===== */
+  #inicio{gap:22px;text-align:center}
+  .marca{display:flex;flex-direction:column;align-items:center;gap:6px}
+  .marca .titulo{
+    font:var(--display);font-size:clamp(40px,7vw,72px);
+    font-style:italic;letter-spacing:-.02em;text-transform:uppercase;
+  }
+  .marca .titulo em{color:var(--oro);font-style:italic}
+  .marca .bajada{color:var(--gris);font-size:15px;max-width:420px}
+  .bandaOro{
+    width:min(520px,80vw);height:8px;border-radius:4px;
+    background:linear-gradient(90deg,var(--oro-hot),var(--oro));
+  }
+  .btnPrimario{
+    background:var(--oro);color:#111C4E;
+    font-weight:800;font-size:19px;padding:18px 34px;
+    box-shadow:0 6px 0 #B8860B33, 0 10px 30px rgba(255,209,0,.25);
+    transition:transform .08s ease;
+  }
+  .btnPrimario:hover{transform:translateY(-2px)}
+  .btnPrimario:active{transform:translateY(1px)}
+  .btnSecundario{
+    background:var(--azul-panel);color:var(--blanco);
+    border:1.5px solid var(--azul-borde);
+    font-weight:600;font-size:15px;padding:13px 22px;
+  }
+  .btnSecundario:hover{border-color:var(--oro);color:var(--oro)}
+  .nota{color:var(--gris);font-size:13px}
+  #aviso{
+    display:none;background:var(--azul-panel);border:1.5px solid var(--oro);
+    border-radius:var(--radio);padding:16px 20px;max-width:480px;font-size:14.5px;
+  }
+  #cargando{display:none;color:var(--oro);font-weight:700;font-size:16px}
+  #panelReanudar{
+    display:none;flex-direction:column;gap:14px;align-items:center;
+    background:var(--azul-panel);border:1.5px solid var(--azul-borde);
+    border-radius:var(--radio);padding:22px 26px;max-width:480px;
+  }
+  #panelReanudar .fila{display:flex;gap:12px;flex-wrap:wrap;justify-content:center}
+
+  /* ===== Culling ===== */
+  #cull{justify-content:flex-start;padding:0}
+  .barraSup{
+    width:100%;display:flex;align-items:center;justify-content:space-between;
+    padding:14px 20px 8px;gap:12px;
+  }
+  .contador{display:flex;flex-direction:column;gap:2px}
+  .contador .linea{
+    font:var(--display);font-size:26px;font-style:italic;letter-spacing:.01em;
+  }
+  .contador small{color:var(--gris);font-size:16px;font-weight:700}
+  .contador .faltan{color:var(--oro);font-size:12.5px;font-weight:700;letter-spacing:.02em}
+  .marcadores{display:flex;gap:14px;font-size:14px;font-weight:700}
+  .marcadores span{display:flex;align-items:center;gap:5px}
+  .punto{width:9px;height:9px;border-radius:50%;display:inline-block}
+  .punto.si{background:var(--si)} .punto.no{background:var(--no)} .punto.duda{background:var(--duda)}
+  .botonesSup{display:flex;align-items:center;gap:8px}
+  #btnTerminar,#btnRespaldo{background:transparent;color:var(--gris);border:1.5px solid var(--azul-borde);padding:8px 16px;font-weight:600;font-size:14px;border-radius:10px}
+  #btnTerminar:hover,#btnRespaldo:hover{color:var(--oro);border-color:var(--oro)}
+  #btnRespaldo .corto{display:none}
+  @media (max-width:760px){
+    #btnRespaldo .corto{display:inline}
+    #btnRespaldo .largo{display:none}
+  }
+
+  #escenario{
+    flex:1;width:100%;position:relative;
+    display:flex;align-items:center;justify-content:center;
+    padding:8px 16px;min-height:0;
+  }
+  #capaZoom{
+    position:fixed;inset:0;z-index:120;display:none;
+    background:#050A24;overflow:hidden;touch-action:none;
+    align-items:center;justify-content:center;
+  }
+  #capaZoom.abierta{display:flex}
+  #imgZoom{
+    position:absolute;top:0;left:0;transform-origin:0 0;
+    max-width:none;max-height:none;pointer-events:none;
+    will-change:transform;
+  }
+  #salirZoom{
+    position:absolute;top:calc(14px + env(safe-area-inset-top));right:14px;
+    background:rgba(5,10,36,.85);color:var(--oro);border:1.5px solid var(--oro);
+    font-weight:800;font-size:14px;padding:10px 18px;border-radius:12px;z-index:2;
+  }
+  #avisoZoom{
+    position:absolute;bottom:calc(18px + env(safe-area-inset-bottom));left:50%;
+    translate:-50% 0;background:rgba(5,10,36,.85);color:var(--gris);
+    font-size:12.5px;padding:7px 14px;border-radius:10px;white-space:nowrap;z-index:2;
+  }
+  #nivelZoom{
+    position:absolute;top:calc(16px + env(safe-area-inset-top));left:16px;
+    background:rgba(5,10,36,.85);color:var(--oro);font-weight:800;font-size:13px;
+    padding:8px 13px;border-radius:10px;z-index:2;
+  }
+  #enlaceZip{background:#2ECC71 !important;color:#062814 !important;
+    box-shadow:0 6px 0 rgba(0,0,0,.18), 0 10px 30px rgba(46,204,113,.3) !important}
+  #btnZoom{
+    position:absolute;bottom:10px;right:10px;z-index:6;
+    background:rgba(5,10,36,.72);color:var(--blanco);
+    border:1.5px solid var(--azul-borde);border-radius:11px;
+    font-size:13px;font-weight:700;padding:8px 13px;
+  }
+  #btnZoom:hover{color:var(--oro);border-color:var(--oro)}
+  #tarjeta{
+    position:relative;max-width:100%;max-height:100%;
+    border-radius:var(--radio);overflow:hidden;
+    background:#050A24;
+    box-shadow:0 18px 50px rgba(0,0,0,.55);
+    touch-action:none;cursor:grab;
+    display:flex;align-items:center;justify-content:center;
+    will-change:transform;
+  }
+  #tarjeta.cargandoFoto{min-width:min(72vw,420px);min-height:min(48vh,400px)}
+  #tarjeta.arrastrando{cursor:grabbing;transition:none}
+  #tarjeta.volviendo{transition:transform .22s ease}
+  #tarjeta.saliendo{transition:transform .25s ease, opacity .25s ease}
+  #foto{
+    display:block;max-width:calc(100vw - 48px);max-height:calc(100vh - 228px);
+    object-fit:contain;pointer-events:none;
+  }
+  #spin{
+    position:absolute;inset:0;z-index:4;pointer-events:none;
+    display:none;flex-direction:column;align-items:center;justify-content:center;gap:12px;
+  }
+  #spinAro{
+    width:44px;height:44px;border-radius:50%;
+    border:4px solid rgba(255,209,0,.2);border-top-color:var(--oro);
+    animation:girar .8s linear infinite;
+  }
+  @keyframes girar{to{transform:rotate(360deg)}}
+  #spinTxt{color:var(--gris);font-size:13.5px;font-weight:600;text-align:center;max-width:80vw}
+  #toast{
+    position:fixed;left:50%;translate:-50% 0;
+    bottom:calc(92px + env(safe-area-inset-bottom));
+    background:var(--oro);color:#111C4E;font-weight:800;font-size:14px;
+    padding:11px 20px;border-radius:12px;z-index:80;text-align:center;max-width:88vw;
+    opacity:0;pointer-events:none;transition:opacity .18s ease;
+    box-shadow:0 8px 26px rgba(0,0,0,.45);
+  }
+  #toast.visible{opacity:1}
+  .sello{
+    position:absolute;top:26px;font:var(--display);font-size:44px;font-style:italic;
+    padding:6px 18px;border:5px solid;border-radius:12px;
+    opacity:0;pointer-events:none;background:rgba(5,10,36,.55);
+  }
+  #selloSi{left:22px;color:var(--si);border-color:var(--si);transform:rotate(-12deg)}
+  #selloNo{right:22px;color:var(--no);border-color:var(--no);transform:rotate(12deg)}
+  #selloDuda{left:50%;translate:-50% 0;color:var(--duda);border-color:var(--duda);transform:rotate(-4deg)}
+  #nombreArchivo{
+    position:absolute;bottom:10px;left:50%;translate:-50% 0;
+    font-family:ui-monospace,Consolas,monospace;font-size:12.5px;color:var(--gris);
+    background:rgba(5,10,36,.7);padding:4px 12px;border-radius:8px;white-space:nowrap;
+  }
+  .modoRepaso #escenario::before{
+    content:"REPASANDO DUDOSAS";position:absolute;top:2px;left:50%;translate:-50% 0;
+    font-weight:800;font-size:12px;letter-spacing:.12em;color:var(--duda);z-index:5;
+  }
+
+  .barraInf{
+    width:100%;display:flex;align-items:center;justify-content:center;
+    gap:18px;padding:12px 20px calc(22px + env(safe-area-inset-bottom));
+  }
+  .btnAccion{
+    display:flex;flex-direction:column;align-items:center;gap:3px;
+    font-weight:800;font-size:15px;padding:14px 26px;min-width:110px;
+    border:2.5px solid;background:var(--azul-panel);border-radius:16px;
+    transition:transform .08s ease;
+  }
+  .btnAccion:hover{transform:translateY(-2px)}
+  .btnAccion:active{transform:scale(.96)}
+  .btnAccion .tecla{font-size:11px;font-weight:600;opacity:.65}
+  #accNo{color:var(--no);border-color:var(--no)}
+  #accDuda{color:var(--duda);border-color:var(--duda)}
+  #accSi{color:var(--si);border-color:var(--si);font-size:17px;padding:16px 32px}
+  #accUndo{
+    color:var(--gris);border:1.5px solid var(--azul-borde);background:transparent;
+    font-weight:600;font-size:13px;padding:10px 16px;border-radius:12px;
+  }
+  #accUndo:hover{color:var(--oro);border-color:var(--oro)}
+  #accUndo:disabled{opacity:.35;cursor:default}
+
+  /* ===== Final ===== */
+  #final{gap:20px;text-align:center;overflow-y:auto;justify-content:flex-start;padding-top:6vh}
+  .tablero{
+    display:flex;gap:16px;flex-wrap:wrap;justify-content:center;
+  }
+  .celda{
+    background:var(--azul-panel);border:1.5px solid var(--azul-borde);
+    border-radius:var(--radio);padding:18px 30px;min-width:130px;
+  }
+  .celda .num{font:var(--display);font-size:42px;font-style:italic}
+  .celda .rot{font-size:13px;font-weight:700;color:var(--gris);letter-spacing:.08em;text-transform:uppercase;margin-top:4px}
+  .celda.cSi .num{color:var(--si)} .celda.cNo .num{color:var(--no)} .celda.cDuda .num{color:var(--duda)}
+  .acciones{display:flex;flex-direction:column;gap:12px;width:min(440px,90vw)}
+  .acciones .btnPrimario{font-size:17px;padding:16px 24px}
+  a.btnPrimario{display:block;box-sizing:border-box}
+  #estadoCopia{display:none;color:var(--oro);font-weight:700}
+  #explicBat{
+    display:none;background:var(--azul-panel);border:1.5px solid var(--oro);
+    border-radius:var(--radio);padding:16px 20px;max-width:480px;font-size:14.5px;text-align:left;line-height:1.5;
+  }
+  .final-titulo{font:var(--display);font-size:clamp(30px,5vw,48px);font-style:italic;text-transform:uppercase}
+  .final-titulo em{color:var(--oro);font-style:italic}
+
+  @media (prefers-reduced-motion: reduce){
+    *{transition:none !important;animation:none !important}
+  }
+  @media (max-width:640px){
+    .contador .linea{font-size:20px}
+    .contador small{font-size:13px}
+    .contador .faltan{font-size:11.5px}
+    .barraSup{padding:10px 12px 6px;gap:8px}
+    #btnTerminar,#btnRespaldo{padding:8px 10px;font-size:12.5px}
+    .marcadores{gap:8px;font-size:12.5px}
+    .btnAccion{min-width:82px;padding:12px 14px;font-size:14px}
+    #accSi{font-size:15px;padding:14px 18px}
+    #accUndo{padding:8px 10px;font-size:12px}
+    .barraInf{gap:8px}
+    #foto{max-width:calc(100vw - 20px);max-height:calc(100dvh - 234px)}
+    .sello{font-size:30px;border-width:4px;top:16px}
+    #escenario{padding:6px 8px}
+  }
+</style>
+</head>
+<body>
+
+<div id="franja"><div id="franjaFill"></div></div>
+
+<!-- ============ PANTALLA 1: INICIO ============ -->
+<section id="inicio" class="pantalla activa">
+  <div class="marca">
+    <div class="titulo">Filtro <em>12:51</em></div>
+    <div class="bandaOro"></div>
+    <div class="bajada"><strong style="color:var(--oro)">PRUEBA DE CARPETAS · v1</strong><br>Elegí la carpeta completa. Las decisiones de esta prueba se guardan aparte.</div>
+  </div>
+
+  <div id="aviso"></div>
+
+  <button id="btnCarpeta" class="btnPrimario">Elegir carpeta completa</button>
+  <button id="btnFotosAlternativa" class="btnSecundario" style="display:none">Elegir archivos individuales (alternativa)</button>
+  <input type="file" id="inputCarpeta" webkitdirectory multiple hidden>
+  <input type="file" id="inputFotos" multiple accept=".jpg,.jpeg,image/jpeg" hidden>
+  <input type="file" id="inputJson" accept=".json,application/json" hidden>
+  <div id="cargando">Leyendo fotos…</div>
+
+  <button id="btnImportar" class="btnSecundario">Ya filtré en el celu: importar decisiones (.json)</button>
+
+  <div id="panelReanudar">
+    <div id="txtReanudar" style="font-size:15px"></div>
+    <div class="fila">
+      <button id="btnContinuar" class="btnPrimario" style="font-size:16px;padding:13px 24px">Continuar donde quedé</button>
+      <button id="btnDeCero" class="btnSecundario">Empezar de cero</button>
+    </div>
+  </div>
+
+  <div class="nota">Funciona sin internet. No borra ni modifica nada de la carpeta original.<br>Usalo en Chrome o Edge.</div>
+</section>
+
+<!-- ============ PANTALLA 2: CULLING ============ -->
+<section id="cull" class="pantalla">
+  <div class="barraSup">
+    <div class="contador">
+      <div class="linea"><span id="numActual">0</span> <small>/ <span id="numTotal">0</span></small></div>
+      <div class="faltan" id="faltan"></div>
+    </div>
+    <div class="marcadores">
+      <span><i class="punto si"></i><span id="cntSi">0</span></span>
+      <span><i class="punto duda"></i><span id="cntDuda">0</span></span>
+      <span><i class="punto no"></i><span id="cntNo">0</span></span>
+    </div>
+    <div class="botonesSup">
+      <button id="btnRespaldo" title="Guardar un respaldo de lo filtrado hasta acá"><span class="corto">⇪</span><span class="largo">⇪ Respaldo</span></button>
+      <button id="btnTerminar">Terminar</button>
+    </div>
+  </div>
+
+  <div id="escenario">
+    <div id="tarjeta">
+      <img id="foto" alt="">
+      <div class="sello" id="selloSi">VA</div>
+      <div class="sello" id="selloNo">NO</div>
+      <div class="sello" id="selloDuda">DUDA</div>
+      <div id="nombreArchivo"></div>
+    </div>
+    <div id="spin"><div id="spinAro"></div><div id="spinTxt"></div></div>
+    <button id="btnZoom">🔍 Ampliar</button>
+  </div>
+
+  <div id="capaZoom">
+    <img id="imgZoom" alt="">
+    <button id="salirZoom">✕ Cerrar</button>
+    <div id="avisoZoom">Pellizcá o tocá dos veces para acercar</div>
+    <div id="nivelZoom">100%</div>
+  </div>
+
+  <div class="barraInf">
+    <button id="accUndo" disabled>↩ Deshacer<br><span class="tecla">Z</span></button>
+    <button id="accNo" class="btnAccion">NO<span class="tecla">← izquierda</span></button>
+    <button id="accDuda" class="btnAccion">DUDA<span class="tecla">↑ arriba</span></button>
+    <button id="accSi" class="btnAccion">VA<span class="tecla">derecha →</span></button>
+  </div>
+</section>
+
+<!-- ============ PANTALLA 3: FINAL ============ -->
+<section id="final" class="pantalla">
+  <div class="final-titulo">Filtrado <em>terminado</em></div>
+  <div class="tablero">
+    <div class="celda cSi"><div class="num" id="finSi">0</div><div class="rot">Van</div></div>
+    <div class="celda cDuda"><div class="num" id="finDuda">0</div><div class="rot">Dudosas</div></div>
+    <div class="celda cNo"><div class="num" id="finNo">0</div><div class="rot">Afuera</div></div>
+  </div>
+
+  <div class="acciones">
+    <button id="btnAtajo" class="btnPrimario" style="display:none">Compartir lista para el Atajo</button>
+    <button id="btnDescargas" class="btnPrimario" style="display:none">Preparar ZIP con las elegidas</button>
+    <a id="enlaceZip" class="btnPrimario" style="display:none;text-decoration:none;text-align:center" download>⬇ Guardar el ZIP</a>
+    <div id="filaLista" style="display:none;flex-direction:column;gap:12px">
+      <button id="btnListaCopiar" class="btnSecundario">Copiar lista al portapapeles</button>
+      <button id="btnListaTxt" class="btnSecundario">Descargar lista (seleccionadas.txt)</button>
+    </div>
+    <div id="rotuloCompu" style="display:none;color:var(--gris);font-size:12.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;margin-top:6px">Para seguir en la compu</div>
+    <button id="btnCompartir" class="btnPrimario" style="display:none">Compartir decisiones (mandalo a la compu)</button>
+    <button id="btnCopiar" class="btnPrimario">Copiar elegidas a una carpeta</button>
+    <div id="estadoCopia"></div>
+    <button id="btnBat" class="btnSecundario">Descargar copiar.bat (alternativa)</button>
+    <div id="explicBat">
+      <strong style="color:var(--oro)">Cómo usar el .bat:</strong><br>
+      1. Guardá <code>copiar.bat</code> <u>adentro de la carpeta que elegiste</u> (la misma de las fotos).<br>
+      2. Hacele doble clic.<br>
+      3. Te crea la carpeta <code>SELECCIONADAS</code> con las que van, y adentro <code>dudosas</code> aparte.
+    </div>
+    <button id="btnRepaso" class="btnSecundario">Repasar las dudosas</button>
+    <button id="btnJson" class="btnSecundario">Descargar respaldo de decisiones (.json)</button>
+    <button id="btnReiniciar" class="btnSecundario" style="color:var(--gris)">Borrar todo y volver al inicio</button>
+  </div>
+</section>
+
+<div id="toast"></div>
+
+<script>
+"use strict";
+/* ================== Estado ================== */
+let archivos = [];          // [{file, nombre, rel, clave}]
+let orden = [];             // índices sobre archivos, orden cronológico
+let cola = [];              // índices (sobre orden) pendientes en la pasada actual
+let pos = 0;                // posición dentro de cola
+let decisiones = {};        // clave -> 'si'|'no'|'duda'
+let pilaUndo = [];
+let carpetaNombre = "";
+let modoRepaso = false;
+const cachePre = new Map(); // idxOrden -> Image precargada (para poder soltarla)
+
+const $ = id => document.getElementById(id);
+const fmt = n => n.toLocaleString("es-AR");
+
+/* ================== IndexedDB (con red de seguridad) ================== */
+let db = null;
+function abrirDB(){
+  return new Promise(res=>{
+    try{
+      const req = indexedDB.open("filtro1251-prueba-carpetas-v1", 1);
+      req.onupgradeneeded = e => e.target.result.createObjectStore("sesiones");
+      req.onsuccess = e => { db = e.target.result; res(true); };
+      req.onerror = () => res(false);
+    }catch(err){ res(false); }
+  });
+}
+let saveTimer = null, saveSucio = false, saveUltimo = 0;
+/* Guarda ya si pasó más de 1,2s desde el último guardado; si no, difiere 300ms.
+   Así, aunque swipee sin parar, nunca hay más de ~1,2s de decisiones en riesgo. */
+function guardar(){
+  if(!db || !carpetaNombre) return;
+  saveSucio = true;
+  if(Date.now() - saveUltimo > 1200){ flushGuardar(); return; }
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(flushGuardar, 300);
+}
+function flushGuardar(){
+  clearTimeout(saveTimer);
+  if(!db || !saveSucio || !carpetaNombre) return;
+  saveSucio = false;
+  saveUltimo = Date.now();
+  try{
+    const tx = db.transaction("sesiones","readwrite");
+    tx.objectStore("sesiones").put(
+      {decisiones, fecha: Date.now(), total: archivos.length}, carpetaNombre);
+    tx.onerror = () => { saveSucio = true; };
+  }catch(err){ saveSucio = true; }
+}
+/* Safari en iPhone mata la pestaña sin avisar cuando le falta memoria.
+   Estos tres eventos son la última chance de dejar todo escrito en disco. */
+document.addEventListener("visibilitychange", ()=>{
+  if(document.visibilityState === "hidden") flushGuardar();
+});
+window.addEventListener("pagehide", flushGuardar);
+window.addEventListener("blur", flushGuardar);
+/* ================== Respaldo (segunda copia, por si se corrompe la principal) ================== */
+let decididasDesdeRespaldo = 0;
+const CADA_CUANTAS = 100;
+
+function respaldoSilencioso(forzar){
+  decididasDesdeRespaldo++;
+  if(!forzar && decididasDesdeRespaldo < CADA_CUANTAS) return;
+  decididasDesdeRespaldo = 0;
+  if(!db || !carpetaNombre) return;
+  try{
+    const tx = db.transaction("sesiones","readwrite");
+    tx.objectStore("sesiones").put(
+      {decisiones, fecha: Date.now(), total: archivos.length, respaldo: true},
+      "RESPALDO__" + carpetaNombre);
+  }catch(err){/* el respaldo nunca debe frenar el filtrado */}
+}
+
+function cargarSesion(nombre){
+  return new Promise(res=>{
+    if(!db) return res(null);
+    try{
+      const req = db.transaction("sesiones").objectStore("sesiones").get(nombre);
+      req.onsuccess = () => res(req.result || null);
+      req.onerror = () => res(null);
+    }catch(err){ res(null); }
+  });
+}
+function borrarSesion(nombre){
+  if(!db) return;
+  try{ db.transaction("sesiones","readwrite").objectStore("sesiones").delete(nombre); }catch(err){}
+}
+/* Devuelve la sesión guardada más reciente que tenga decisiones, o null. */
+function ultimaSesion(){
+  return new Promise(res=>{
+    if(!db) return res(null);
+    try{
+      const st = db.transaction("sesiones").objectStore("sesiones");
+      const rk = st.getAllKeys(), rv = st.getAll();
+      let claves = null, valores = null;
+      const listo = ()=>{
+        if(!claves || !valores) return;
+        let mejor = null;
+        claves.forEach((k,i)=>{
+          const v = valores[i];
+          if(!v || !v.decisiones) return;
+          const n = Object.keys(v.decisiones).length;
+          if(!n) return;
+          if(!mejor || (v.fecha||0) > mejor.fecha) mejor = {nombre:k, n, fecha:v.fecha||0};
+        });
+        res(mejor);
+      };
+      rk.onsuccess = ()=>{ claves = rk.result; listo(); };
+      rv.onsuccess = ()=>{ valores = rv.result; listo(); };
+      rk.onerror = rv.onerror = ()=>res(null);
+    }catch(err){ res(null); }
+  });
+}
+
+/* ================== Carga de carpeta / fotos ================== */
+const esIOS = /iP(hone|od|ad)/.test(navigator.userAgent) ||
+              (navigator.userAgent.includes("Mac") && navigator.maxTouchPoints > 1);
+/* Ventana de precarga según el equipo, no según la marca: un Samsung de gama media
+   no es una PC aunque tampoco sea iPhone */
+const esAndroid = !esIOS && /Android/i.test(navigator.userAgent);
+const esTactil = esIOS || (window.matchMedia && matchMedia("(pointer:coarse)").matches);
+const memGB    = navigator.deviceMemory || (esIOS ? 6 : (esTactil ? 4 : 8));
+const PRE_ADELANTE = esTactil ? (memGB <= 4 ? 2 : 3) : 4;
+const PRE_ATRAS    = esTactil ? 1 : 2;
+const CONCURRENCIA = esTactil ? 1 : 2;   // previews generándose a la vez
+/* Lado largo del preview: cubre la pantalla en cualquier orientación, con tope */
+const LADO_PREVIEW = (()=>{
+  const dpr = Math.min(window.devicePixelRatio || 1, 3);
+  const lado = Math.max(screen.width, screen.height) * dpr;
+  const tope = memGB <= 4 ? 1600 : 2560;
+  return Math.min(tope, Math.max(1200, Math.round(lado)));
+})();
+let importPendiente = null;
+
+if(esIOS){
+  $("btnFotosAlternativa").style.display = "";
+  if(!("webkitdirectory" in $("inputCarpeta"))){
+    $("btnCarpeta").disabled = true;
+    $("btnCarpeta").textContent = "Carpetas no disponibles en este navegador";
+  }
+  $("btnImportar").style.display = "none";
+  document.querySelector("#inicio .nota").innerHTML =
+    "Tocá <strong>Elegir carpeta completa</strong> y seleccioná la carpeta local de la cobertura en <strong>En mi iPhone</strong>.<br>No hace falta marcar cada foto. Los originales y la lista para tu atajo se mantienen.<br>Abrí esta prueba con internet. Guardado separado de la web habitual.";
+}
+
+$("btnCarpeta").addEventListener("click", ()=>{
+  $("inputCarpeta").click();
+});
+$("btnFotosAlternativa").addEventListener("click", ()=> $("inputFotos").click());
+$("btnImportar").addEventListener("click", ()=> $("inputJson").click());
+
+$("inputJson").addEventListener("change", e=>{
+  const f = e.target.files[0];
+  e.target.value = "";
+  if(!f) return;
+  const lector = new FileReader();
+  lector.onload = ()=>{
+    try{
+      const dato = JSON.parse(lector.result);
+      if(!dato.van && !dato.dudosas) throw new Error("formato");
+      importPendiente = dato;
+      mostrarAviso("Decisiones cargadas: " + (dato.van?.length||0) + " que van y " +
+        (dato.dudosas?.length||0) + " dudosas. Ahora elegí la carpeta de la SD con las fotos originales.");
+      $("inputCarpeta").click();
+    }catch(err){
+      mostrarAviso("Ese archivo no parece un decisiones.json del Filtro. Fijate de elegir el correcto.");
+    }
+  };
+  lector.readAsText(f);
+});
+
+$("inputCarpeta").addEventListener("change", e=>procesarLista(e));
+$("inputFotos").addEventListener("change", e=>procesarLista(e));
+
+async function procesarLista(e){
+  const lista = [...e.target.files].filter(f => /\.(jpe?g|jfif)$/i.test(f.name));
+  e.target.value = "";
+  if(!lista.length){
+    mostrarAviso(esIOS
+      ? "No llegó ninguna foto JPEG. Elegí la carpeta que contiene los JPG de la cámara o probá el botón de archivos individuales."
+      : "No encontré archivos JPEG en esa carpeta. Fijate de elegir la carpeta DCIM de la SD (o la que tenga las fotos).");
+    return;
+  }
+  $("cargando").style.display = "block";
+  $("aviso").style.display = "none";
+
+  archivos = lista.map(f=>({
+    file: f,
+    nombre: f.name,
+    rel: f.webkitRelativePath || f.name,
+    clave: f.name + "|" + f.size + "|" + f.lastModified
+  }));
+  orden = archivos.map((_,i)=>i).sort((a,b)=>
+    archivos[a].file.lastModified - archivos[b].file.lastModified ||
+    archivos[a].nombre.localeCompare(archivos[b].nombre)
+  );
+  const conRuta = archivos[0].rel !== archivos[0].nombre;
+  carpetaNombre = conRuta ? (archivos[0].rel.split("/")[0] || "carpeta") : "seleccion-movil";
+
+  if(importPendiente){
+    $("cargando").style.display = "none";
+    aplicarImportacion(importPendiente);
+    importPendiente = null;
+    return;
+  }
+
+  const previa = await cargarSesion(carpetaNombre);
+  $("cargando").style.display = "none";
+
+  if(previa && previa.decisiones){
+    const conocidas = archivos.filter(a=>previa.decisiones[a.clave]!==undefined).length;
+    if(conocidas > 0){
+      $("txtReanudar").innerHTML =
+        "Encontré una sesión anterior de <strong>" + carpetaNombre + "</strong>: " +
+        "<strong style='color:var(--oro)'>" + fmt(conocidas) + "</strong> fotos ya decididas de " + fmt(archivos.length) + ".";
+      $("panelReanudar").style.display = "flex";
+      $("btnContinuar").onclick = ()=>{ decisiones = previa.decisiones; empezar(); };
+      $("btnDeCero").onclick = ()=>{
+        if(!confirm("Vas a perder las " + fmt(conocidas) + " decisiones guardadas y arrancás de cero. ¿Seguro?")) return;
+        decisiones = {}; borrarSesion(carpetaNombre); empezar();
+      };
+      return;
+    }
+  }
+  decisiones = {};
+  empezar();
+}
+
+/* Importación: matchea por nombre (sin importar extensión) y por peso exacto */
+function aplicarImportacion(dato){
+  const stemDe = s => String(s).replace(/\.[^.]+$/,"").toLowerCase();
+  const porNombre = new Map(), porStem = new Map(), porPeso = new Map();
+  const meter = (m,k,a)=>{ if(!m.has(k)) m.set(k,[]); m.get(k).push(a); };
+  for(const a of archivos){
+    meter(porNombre, a.nombre.toLowerCase(), a);
+    meter(porStem, stemDe(a.nombre), a);
+    meter(porPeso, a.file.size, a);
+  }
+  const buscar = ent=>{
+    const esObj = typeof ent === "object" && ent !== null;
+    const nombre = (esObj ? ent.n : String(ent).split("/").pop()) || "";
+    const peso = esObj ? ent.s : null;
+    const elegir = lista => (peso && lista.length>1)
+      ? (lista.find(c=>c.file.size===peso) || lista[0]) : lista[0];
+    let cand = porNombre.get(nombre.toLowerCase());
+    if(cand) return elegir(cand);
+    cand = porStem.get(stemDe(nombre));
+    if(cand) return elegir(cand);
+    if(peso){
+      cand = porPeso.get(peso);
+      if(cand && cand.length === 1) return cand[0];
+    }
+    return null;
+  };
+  decisiones = {};
+  let ok = 0, faltan = 0;
+  const sinMatch = [];
+  const aplicar = (lista, valor)=>{
+    for(const ent of (lista||[])){
+      const a = buscar(ent);
+      if(a){ decisiones[a.clave] = valor; ok++; }
+      else{
+        faltan++;
+        if(sinMatch.length < 3)
+          sinMatch.push(typeof ent==="object" ? ent.n : String(ent).split("/").pop());
+      }
+    }
+  };
+  aplicar(dato.van, "si");
+  aplicar(dato.dudosas, "duda");
+  aplicar(dato.no, "no");
+  guardar();
+  irAFinal();
+  const sinRevisar = archivos.filter(a=>decisiones[a.clave]===undefined).length;
+  const avisos = [];
+  if(faltan)
+    avisos.push(fmt(faltan) + " fotos del JSON no aparecieron en esta carpeta (matcheadas: " + fmt(ok) +
+      "). Nombres que vinieron del celu: " + sinMatch.join(", ") +
+      " — si en el iPhone elegiste desde Fototeca, ahí está el problema: elegílas desde Archivos.");
+  if(sinRevisar)
+    avisos.push(fmt(sinRevisar) + " fotos de esta carpeta no estaban en el filtrado del celu (quedan sin revisar, no se copian).");
+  if(avisos.length){
+    const est = $("estadoCopia");
+    est.style.display = "block";
+    est.textContent = "Ojo: " + avisos.join(" Además, ");
+  }
+}
+
+function mostrarAviso(msj){
+  const a = $("aviso");
+  a.textContent = msj;
+  a.style.display = "block";
+}
+
+/* ================== Flujo principal ================== */
+function empezar(){
+  modoRepaso = false;
+  document.body.classList.remove("modoRepaso");
+  cola = orden.map((_,i)=>i).filter(i => decisiones[archivos[orden[i]].clave] === undefined);
+  pos = 0;
+  posEnCola = new Map(cola.map((v,i)=>[v,i]));
+  pilaUndo = [];
+  if(!cola.length){ irAFinal(); return; }
+  cambiarPantalla("cull");
+  pedirWakeLock();
+  $("numTotal").textContent = fmt(orden.length);
+  refrescar();
+}
+
+function empezarRepaso(){
+  modoRepaso = true;
+  document.body.classList.add("modoRepaso");
+  cola = orden.map((_,i)=>i).filter(i => decisiones[archivos[orden[i]].clave] === "duda");
+  pos = 0;
+  posEnCola = new Map(cola.map((v,i)=>[v,i]));
+  pilaUndo = [];
+  if(!cola.length) return;
+  cambiarPantalla("cull");
+  pedirWakeLock();
+  $("numTotal").textContent = fmt(cola.length);
+  refrescar();
+}
+
+function cambiarPantalla(id){
+  document.querySelectorAll(".pantalla").forEach(p=>p.classList.remove("activa"));
+  $(id).classList.add("activa");
+}
+
+function contarDecisiones(){
+  let si=0, no=0, duda=0;
+  for(const a of archivos){
+    const d = decisiones[a.clave];
+    if(d==="si") si++; else if(d==="no") no++; else if(d==="duda") duda++;
+  }
+  return {si,no,duda};
+}
+
+function refrescar(){
+  if(pos >= cola.length){ irAFinal(); return; }
+  const idxOrden = cola[pos];
+  const arch = archivos[orden[idxOrden]];
+
+  $("numActual").textContent = fmt(modoRepaso ? pos+1 : (orden.length - cola.length + pos + 1));
+  const c = contarDecisiones();
+  $("cntSi").textContent = fmt(c.si);
+  $("cntNo").textContent = fmt(c.no);
+  $("cntDuda").textContent = fmt(c.duda);
+  const avance = modoRepaso ? pos / cola.length : (orden.length - cola.length + pos) / orden.length;
+  $("franjaFill").style.width = (avance*100).toFixed(2) + "%";
+  const pendientes = cola.length - pos;
+  $("faltan").textContent = "faltan " + fmt(pendientes) + (modoRepaso ? " dudosas" : "");
+
+  mostrarFoto(idxOrden, arch);
+  $("accUndo").disabled = !pilaUndo.length;
+
+  resetTarjeta();
+  precargar();
+  limpiarCache();
+}
+
+/* ================== Carga de la foto en pantalla ================== */
+let cargaToken = 0, spinTimer = null;
+function mostrarFoto(idxOrden, arch){
+  const img = $("foto"), t = $("tarjeta");
+  const tok = ++cargaToken;          // si decide antes de que cargue, la vieja ya no cuenta
+  clearTimeout(spinTimer);
+  ocultarSpin();
+  img.style.visibility = "hidden";
+  t.classList.add("cargandoFoto");   // la tarjeta mantiene tamaño: se puede swipear igual
+  $("nombreArchivo").textContent = arch.nombre;
+
+  img.onload = ()=>{
+    if(tok !== cargaToken) return;
+    clearTimeout(spinTimer);
+    ocultarSpin();
+    t.classList.remove("cargandoFoto");
+    img.style.visibility = "visible";
+  };
+  img.onerror = ()=>{
+    if(tok !== cargaToken) return;
+    clearTimeout(spinTimer);
+    verSpin("No se pudo abrir " + arch.nombre + ". Decidí igual y seguí.", false);
+  };
+  // 180ms de gracia: si el preview ya está listo no aparece nada y no parpadea
+  spinTimer = setTimeout(()=>{ if(tok === cargaToken) verSpin("Cargando foto…", true); }, 180);
+  previewDe(idxOrden).then(u=>{
+    if(tok !== cargaToken) return;
+    if(!u){ cachePreview.delete(idxOrden); return mostrarFoto(idxOrden, arch); }  // quedó fuera de ventana: pedir de nuevo
+    img.src = u;
+    if(img.complete && img.naturalWidth > 0) img.onload();
+  });
+}
+function verSpin(texto, conAro){
+  $("spin").style.display = "flex";
+  $("spinAro").style.display = conAro ? "block" : "none";
+  $("spinTxt").textContent = texto;
+}
+function ocultarSpin(){ $("spin").style.display = "none"; }
+
+
+/* ================== Previews livianos ==================
+   Un JPEG de 24MP descomprimido son ~100MB de RAM. Mostrarlo entero para pintarlo en
+   430px de ancho es lo que ahoga a los teléfonos flojos. Acá se genera una copia chica
+   (LADO_PREVIEW) en un hilo aparte y el visor muestra esa. El zoom sigue usando el original.
+   Cascada: worker → hilo principal → original tal cual (nunca peor que antes). */
+/* Lee orientación EXIF y dimensiones de un JPEG mirando solo la cabecera.
+   Devuelve {orient, w, h}. orient 0 = no encontrada. */
+function leerCabecera(buf){
+  const v = new DataView(buf);
+  let orient = 0, w = 0, h = 0;
+  if(v.byteLength < 4 || v.getUint16(0) !== 0xFFD8) return {orient, w, h};
+  let p = 2;
+  while(p + 4 <= v.byteLength){
+    if(v.getUint8(p) !== 0xFF){ p++; continue; }
+    const marca = v.getUint8(p+1);
+    if(marca === 0xD8 || marca === 0x01 || (marca >= 0xD0 && marca <= 0xD7)){ p += 2; continue; }
+    if(marca === 0xD9 || marca === 0xDA) break;           // fin / inicio de datos
+    const largo = v.getUint16(p+2);
+    if(largo < 2) break;
+    // SOF0..SOF15 (menos DHT C4, JPG C8, DAC CC): alto/ancho
+    if(marca >= 0xC0 && marca <= 0xCF && marca !== 0xC4 && marca !== 0xC8 && marca !== 0xCC){
+      if(p + 9 <= v.byteLength){ h = v.getUint16(p+5); w = v.getUint16(p+7); }
+    }
+    // APP1 Exif: orientación
+    if(marca === 0xE1 && !orient && p + 10 <= v.byteLength &&
+       v.getUint32(p+4) === 0x45786966 && v.getUint16(p+8) === 0){
+      const t = p + 10;                                     // inicio del TIFF
+      if(t + 8 <= v.byteLength){
+        const le = v.getUint16(t) === 0x4949;               // "II" = little endian
+        const ifd = t + v.getUint32(t+4, le);
+        if(ifd + 2 <= v.byteLength){
+          const n = v.getUint16(ifd, le);
+          for(let i = 0; i < n; i++){
+            const e = ifd + 2 + i*12;
+            if(e + 12 > v.byteLength) break;
+            if(v.getUint16(e, le) === 0x0112){ orient = v.getUint16(e+8, le); break; }
+          }
+        }
+      }
+    }
+    if(orient && w) break;
+    p += 2 + largo;
+  }
+  return {orient, w, h};
+}
+
+const cachePreview = new Map();   // idxOrden -> Promise<url>
+const urlOriginal  = new Map();   // idxOrden -> url del archivo original (solo si el preview falló)
+let posEnCola = new Map();        // idxOrden -> posición en cola (para priorizar la actual)
+let workerPrev = null, workerRoto = false, fallosWorker = 0;
+let pendientes = [];              // idxOrden esperando generación
+let generando = 0;
+const esperando = new Map();      // idxOrden -> {resolve}
+
+const CODIGO_WORKER = `
+/* Lee orientación EXIF y dimensiones de un JPEG mirando solo la cabecera.
+   Devuelve {orient, w, h}. orient 0 = no encontrada. */
+function leerCabecera(buf){
+  const v = new DataView(buf);
+  let orient = 0, w = 0, h = 0;
+  if(v.byteLength < 4 || v.getUint16(0) !== 0xFFD8) return {orient, w, h};
+  let p = 2;
+  while(p + 4 <= v.byteLength){
+    if(v.getUint8(p) !== 0xFF){ p++; continue; }
+    const marca = v.getUint8(p+1);
+    if(marca === 0xD8 || marca === 0x01 || (marca >= 0xD0 && marca <= 0xD7)){ p += 2; continue; }
+    if(marca === 0xD9 || marca === 0xDA) break;           // fin / inicio de datos
+    const largo = v.getUint16(p+2);
+    if(largo < 2) break;
+    // SOF0..SOF15 (menos DHT C4, JPG C8, DAC CC): alto/ancho
+    if(marca >= 0xC0 && marca <= 0xCF && marca !== 0xC4 && marca !== 0xC8 && marca !== 0xCC){
+      if(p + 9 <= v.byteLength){ h = v.getUint16(p+5); w = v.getUint16(p+7); }
+    }
+    // APP1 Exif: orientación
+    if(marca === 0xE1 && !orient && p + 10 <= v.byteLength &&
+       v.getUint32(p+4) === 0x45786966 && v.getUint16(p+8) === 0){
+      const t = p + 10;                                     // inicio del TIFF
+      if(t + 8 <= v.byteLength){
+        const le = v.getUint16(t) === 0x4949;               // "II" = little endian
+        const ifd = t + v.getUint32(t+4, le);
+        if(ifd + 2 <= v.byteLength){
+          const n = v.getUint16(ifd, le);
+          for(let i = 0; i < n; i++){
+            const e = ifd + 2 + i*12;
+            if(e + 12 > v.byteLength) break;
+            if(v.getUint16(e, le) === 0x0112){ orient = v.getUint16(e+8, le); break; }
+          }
+        }
+      }
+    }
+    if(orient && w) break;
+    p += 2 + largo;
+  }
+  return {orient, w, h};
+}
+
+self.onmessage = async e => {
+  const {id, file, lado} = e.data;
+  try{
+    const cab = leerCabecera(await file.slice(0, 131072).arrayBuffer());
+    let bmp;
+    try{ bmp = await createImageBitmap(file, {imageOrientation:"from-image"}); }
+    catch(err){ bmp = await createImageBitmap(file); }
+    // si el EXIF pide rotar 90° y el navegador no lo hizo (dimensiones no intercambiadas), lo hago yo
+    const rotar = (cab.orient >= 5 && cab.orient <= 8) && cab.w && bmp.width === cab.w;
+    const srcW = bmp.width, srcH = bmp.height;
+    const outW0 = rotar ? srcH : srcW, outH0 = rotar ? srcW : srcH;
+    const esc = Math.min(1, lado / Math.max(outW0, outH0));
+    const tw = Math.max(1, Math.round(outW0 * esc)), th = Math.max(1, Math.round(outH0 * esc));
+    const c = new OffscreenCanvas(tw, th);
+    const ctx = c.getContext("2d");
+    if(rotar){
+      ctx.translate(tw/2, th/2);
+      ctx.rotate((cab.orient === 6 ? 90 : cab.orient === 8 ? -90 : 90) * Math.PI/180);
+      ctx.drawImage(bmp, -th/2, -tw/2, th, tw);
+    }else{
+      ctx.drawImage(bmp, 0, 0, tw, th);
+    }
+    bmp.close();
+    const blob = await c.convertToBlob({type:"image/jpeg", quality:0.82});
+    self.postMessage({id, blob});
+  }catch(err){
+    self.postMessage({id, error: String(err && err.message || err)});
+  }
+};`;
+
+function crearWorker(){
+  if(workerRoto || workerPrev) return;
+  try{
+    if(typeof Worker === "undefined" || typeof OffscreenCanvas === "undefined" ||
+       typeof createImageBitmap === "undefined") { workerRoto = true; return; }
+    workerPrev = new Worker(URL.createObjectURL(new Blob([CODIGO_WORKER], {type:"text/javascript"})));
+    workerPrev.onmessage = e=>{
+      const {id, blob, error} = e.data;
+      const esp = esperando.get(id);
+      esperando.delete(id);
+      generando--;
+      if(!esp) { bombear(); return; }
+      if(blob && blob.size > 0){
+        fallosWorker = 0;
+        esp.resolve(URL.createObjectURL(blob));
+      }else{
+        if(++fallosWorker >= 3) workerRoto = true;   // el worker no sirve acá: dejamos de usarlo
+        generarEnPrincipal(id).then(esp.resolve);
+      }
+      bombear();
+    };
+    workerPrev.onerror = ()=>{ workerRoto = true; for(const [id,esp] of esperando){ generarEnPrincipal(id).then(esp.resolve); } esperando.clear(); generando = 0; bombear(); };
+  }catch(err){ workerRoto = true; }
+}
+
+/* Plan B: mismo trabajo en el hilo principal. <img> aplica la orientación EXIF solo. */
+async function generarEnPrincipal(idxOrden){
+  const file = archivos[orden[idxOrden]].file;
+  const u = URL.createObjectURL(file);
+  try{
+    const im = new Image();
+    im.decoding = "async";
+    im.src = u;
+    if(im.decode) await im.decode(); else await new Promise((r,j)=>{ im.onload=r; im.onerror=j; });
+    const esc = Math.min(1, LADO_PREVIEW / Math.max(im.naturalWidth, im.naturalHeight));
+    const tw = Math.max(1, Math.round(im.naturalWidth*esc)), th = Math.max(1, Math.round(im.naturalHeight*esc));
+    const c = document.createElement("canvas"); c.width = tw; c.height = th;
+    c.getContext("2d").drawImage(im, 0, 0, tw, th);
+    im.src = "";
+    const blob = await new Promise(r=>c.toBlob(r, "image/jpeg", 0.82));
+    URL.revokeObjectURL(u);
+    if(blob && blob.size > 0) return URL.createObjectURL(blob);
+  }catch(err){ URL.revokeObjectURL(u); }
+  // Plan C: el original tal cual (como funcionaba antes)
+  const uo = URL.createObjectURL(file);
+  urlOriginal.set(idxOrden, uo);
+  return uo;
+}
+
+function bombear(){
+  while(generando < CONCURRENCIA && pendientes.length){
+    // prioridad: la más cercana a la foto actual (la actual primero)
+    let mejor = 0, mejorD = Infinity;
+    for(let i=0;i<pendientes.length;i++){
+      const d = Math.abs((posEnCola.get(pendientes[i]) ?? 1e9) - pos);
+      if(d < mejorD){ mejorD = d; mejor = i; }
+    }
+    const id = pendientes.splice(mejor,1)[0];
+    const esp = esperando.get(id);
+    if(!esp) continue;
+    // ya quedó fuera de la ventana: no gastamos CPU, se pedirá de nuevo si hace falta
+    if(mejorD > PRE_ADELANTE + PRE_ATRAS + 1){ esperando.delete(id); cachePreview.delete(id); esp.resolve(null); continue; }
+    generando++;
+    if(!workerRoto){
+      crearWorker();
+      if(workerPrev){ workerPrev.postMessage({id, file: archivos[orden[id]].file, lado: LADO_PREVIEW}); continue; }
+    }
+    generarEnPrincipal(id).then(u=>{ esperando.delete(id); generando--; esp.resolve(u); bombear(); });
+  }
+}
+
+function previewDe(idxOrden){
+  if(cachePreview.has(idxOrden)) return cachePreview.get(idxOrden);
+  const pr = new Promise(resolve=>{ esperando.set(idxOrden, {resolve}); pendientes.push(idxOrden); });
+  cachePreview.set(idxOrden, pr);
+  bombear();
+  return pr;
+}
+
+function precargar(){
+  for(let k=1;k<=PRE_ADELANTE;k++){
+    const p = pos + k;
+    if(p < cola.length && !cachePre.has(cola[p])){
+      const id = cola[p];
+      cachePre.set(id, null);                 // reservado
+      previewDe(id).then(u=>{
+        if(!u || !cachePre.has(id)) return;
+        const im = new Image();               // decodifica el preview chico para que el swipe no espere
+        im.decoding = "async";
+        im.src = u;
+        cachePre.set(id, im);
+      });
+    }
+  }
+}
+function limpiarCache(){
+  const vivos = new Set();
+  for(let k=-PRE_ATRAS;k<=PRE_ADELANTE;k++){
+    const p = pos + k;
+    if(p>=0 && p<cola.length) vivos.add(cola[p]);
+  }
+  for(const [k,im] of cachePre){
+    if(!vivos.has(k)){ if(im) im.src = ""; cachePre.delete(k); }
+  }
+  for(const [k,pr] of cachePreview){
+    if(!vivos.has(k)){
+      cachePreview.delete(k);
+      pr.then(u=>{ if(u && !urlOriginal.has(k)) URL.revokeObjectURL(u); });
+    }
+  }
+  for(const [k,u] of urlOriginal){
+    if(!vivos.has(k)){ URL.revokeObjectURL(u); urlOriginal.delete(k); }
+  }
+}
+
+/* ================== Decidir / Deshacer ================== */
+let animando = false;
+function decidir(d){
+  if(pos >= cola.length || animando) return;
+  const clave = archivos[orden[cola[pos]]].clave;
+  pilaUndo.push({pos, clave, previa: decisiones[clave]});
+  decisiones[clave] = d;
+  guardar();
+  respaldoSilencioso(false);
+  animarSalida(d);
+}
+function deshacer(){
+  if(animando) return;
+  const u = pilaUndo.pop();
+  if(!u) return;
+  if(u.previa === undefined) delete decisiones[u.clave];
+  else decisiones[u.clave] = u.previa;
+  pos = u.pos;
+  guardar();
+  refrescar();
+}
+
+function animarSalida(d){
+  animando = true;
+  const t = $("tarjeta");
+  const dx = d==="si" ? window.innerWidth : d==="no" ? -window.innerWidth : 0;
+  const dy = d==="duda" ? -window.innerHeight*0.7 : 40;
+  mostrarSello(d, 1);
+  t.classList.add("saliendo");
+  t.style.transform = `translate(${dx*0.8}px, ${dy}px) rotate(${dx*0.02}deg)`;
+  t.style.opacity = "0";
+  setTimeout(()=>{ animando = false; pos++; refrescar(); }, 140);
+}
+function resetTarjeta(){
+  const t = $("tarjeta");
+  t.classList.remove("saliendo","volviendo","arrastrando");
+  t.style.transform = "";
+  t.style.opacity = "1";
+  mostrarSello(null, 0);
+}
+function mostrarSello(d, fuerza){
+  $("selloSi").style.opacity   = d==="si"   ? fuerza : 0;
+  $("selloNo").style.opacity   = d==="no"   ? fuerza : 0;
+  $("selloDuda").style.opacity = d==="duda" ? fuerza : 0;
+}
+
+/* ================== Arrastre (swipe) ================== */
+let drag = null;
+const tarjeta = $("tarjeta");
+tarjeta.addEventListener("pointerdown", e=>{
+  if(pos >= cola.length || zoomAbierto) return;
+  drag = {x0:e.clientX, y0:e.clientY, dx:0, dy:0};
+  tarjeta.setPointerCapture(e.pointerId);
+  tarjeta.classList.add("arrastrando");
+  tarjeta.classList.remove("volviendo");
+});
+tarjeta.addEventListener("pointermove", e=>{
+  if(!drag) return;
+  drag.dx = e.clientX - drag.x0;
+  drag.dy = e.clientY - drag.y0;
+  tarjeta.style.transform = `translate(${drag.dx}px, ${drag.dy}px) rotate(${drag.dx*0.04}deg)`;
+  const d = direccionDe(drag);
+  mostrarSello(d, d ? Math.min(1, intensidadDe(drag)) : 0);
+});
+function soltar(){
+  if(!drag) return;
+  const d = direccionDe(drag);
+  const listo = d && intensidadDe(drag) >= 1;
+  drag = null;
+  tarjeta.classList.remove("arrastrando");
+  if(listo){ decidir(d); }
+  else{
+    tarjeta.classList.add("volviendo");
+    tarjeta.style.transform = "";
+    mostrarSello(null,0);
+  }
+}
+tarjeta.addEventListener("pointerup", soltar);
+tarjeta.addEventListener("pointercancel", soltar);
+
+function direccionDe(g){
+  if(Math.abs(g.dx) > Math.abs(g.dy)) return g.dx > 0 ? "si" : "no";
+  if(g.dy < 0) return "duda";
+  return null;
+}
+function intensidadDe(g){
+  const d = direccionDe(g);
+  if(d==="duda") return Math.abs(g.dy)/110;
+  return Math.abs(g.dx)/120;
+}
+
+/* ================== Zoom (se abre SOLO con la lupa) ================== */
+let zoomAbierto = false, zoomURL = null;
+let zEsc = 1, zMin = 1, zx = 0, zy = 0;
+const punteros = new Map();
+let gesto = null;
+
+function abrirZoom(){
+  if(zoomAbierto || pos >= cola.length) return;
+  const arch = archivos[orden[cola[pos]]];
+  zoomAbierto = true;
+  zoomURL = URL.createObjectURL(arch.file);
+  const img = $("imgZoom");
+  img.onload = ()=>{
+    const vw = window.innerWidth, vh = window.innerHeight;
+    img.style.width  = img.naturalWidth + "px";
+    img.style.height = img.naturalHeight + "px";
+    // arranca mostrando la foto entera, como la galería
+    zMin = Math.min(vw / img.naturalWidth, vh / img.naturalHeight);
+    zEsc = zMin;
+    zx = (vw - img.naturalWidth  * zEsc) / 2;
+    zy = (vh - img.naturalHeight * zEsc) / 2;
+    aplicarZoom();
+  };
+  img.onerror = ()=>{ toast("No se pudo abrir en grande"); cerrarZoom(); };
+  img.src = zoomURL;
+  $("capaZoom").classList.add("abierta");
+}
+
+function aplicarZoom(){
+  const img = $("imgZoom");
+  const vw = window.innerWidth, vh = window.innerHeight;
+  const aw = img.naturalWidth * zEsc, ah = img.naturalHeight * zEsc;
+  // si entra en pantalla queda centrada; si no, se limita a no despegarse del borde
+  zx = aw <= vw ? (vw - aw) / 2 : Math.min(0, Math.max(vw - aw, zx));
+  zy = ah <= vh ? (vh - ah) / 2 : Math.min(0, Math.max(vh - ah, zy));
+  img.style.transform = "translate(" + zx + "px, " + zy + "px) scale(" + zEsc + ")";
+  $("nivelZoom").textContent = Math.round(zEsc * 100) + "%";
+}
+
+function escalarEn(nuevaEsc, cx, cy){
+  const tope = Math.max(1, zMin) * 6;
+  nuevaEsc = Math.min(tope, Math.max(zMin * 0.9, nuevaEsc));
+  const k = nuevaEsc / zEsc;
+  zx = cx - k * (cx - zx);
+  zy = cy - k * (cy - zy);
+  zEsc = nuevaEsc;
+  aplicarZoom();
+}
+
+function cerrarZoom(){
+  if(!zoomAbierto) return;
+  zoomAbierto = false;
+  punteros.clear(); gesto = null;
+  $("capaZoom").classList.remove("abierta");
+  const img = $("imgZoom");
+  img.onload = null;
+  img.removeAttribute("src");
+  img.style.width = img.style.height = "";
+  if(zoomURL){ URL.revokeObjectURL(zoomURL); zoomURL = null; }  // libera la memoria grande
+}
+
+$("btnZoom").addEventListener("click", e=>{ e.stopPropagation(); abrirZoom(); });
+$("salirZoom").addEventListener("click", e=>{ e.stopPropagation(); cerrarZoom(); });
+
+/* Un dedo: mover · Dos dedos: pellizcar para acercar o alejar */
+const capaZ = $("capaZoom");
+function centroYDist(){
+  const p = [...punteros.values()];
+  if(p.length < 2) return null;
+  return {
+    cx: (p[0].x + p[1].x) / 2,
+    cy: (p[0].y + p[1].y) / 2,
+    d: Math.hypot(p[0].x - p[1].x, p[0].y - p[1].y)
+  };
+}
+capaZ.addEventListener("pointerdown", e=>{
+  if(e.target.id === "salirZoom") return;
+  capaZ.setPointerCapture(e.pointerId);
+  punteros.set(e.pointerId, {x:e.clientX, y:e.clientY});
+  const c = centroYDist();
+  gesto = c ? {tipo:"pinza", d:c.d, cx:c.cx, cy:c.cy, esc:zEsc}
+            : {tipo:"mover", x:e.clientX - zx, y:e.clientY - zy};
+});
+capaZ.addEventListener("pointermove", e=>{
+  if(!punteros.has(e.pointerId)) return;
+  punteros.set(e.pointerId, {x:e.clientX, y:e.clientY});
+  if(!gesto) return;
+  if(gesto.tipo === "pinza"){
+    const c = centroYDist();
+    if(!c || !gesto.d) return;
+    // el pellizco escala, y el centro moviéndose arrastra la foto
+    zx += c.cx - gesto.cx;
+    zy += c.cy - gesto.cy;
+    gesto.cx = c.cx; gesto.cy = c.cy;
+    escalarEn(gesto.esc * (c.d / gesto.d), c.cx, c.cy);
+  }else{
+    zx = e.clientX - gesto.x;
+    zy = e.clientY - gesto.y;
+    aplicarZoom();
+  }
+});
+function soltarZoom(e){
+  punteros.delete(e.pointerId);
+  if(punteros.size === 1){
+    const [id, p] = [...punteros.entries()][0];
+    gesto = {tipo:"mover", x:p.x - zx, y:p.y - zy};   // queda un dedo: sigue moviendo
+  }else if(punteros.size === 0){
+    gesto = null;
+    if(zEsc < zMin){ zEsc = zMin; aplicarZoom(); }    // se pasó de alejar: vuelve solo
+  }else{
+    const c = centroYDist();
+    if(c) gesto = {tipo:"pinza", d:c.d, cx:c.cx, cy:c.cy, esc:zEsc};
+  }
+}
+capaZ.addEventListener("pointerup", soltarZoom);
+capaZ.addEventListener("pointercancel", soltarZoom);
+
+/* Doble toque adentro del zoom: salta al 100% justo donde tocaste (como la galería) */
+let tapPrevio = 0, tapX = 0, tapY = 0;
+capaZ.addEventListener("pointerup", e=>{
+  if(e.target.id === "salirZoom" || punteros.size) return;
+  const ahora = Date.now();
+  const cerca = Math.hypot(e.clientX - tapX, e.clientY - tapY) < 40;
+  if(ahora - tapPrevio < 300 && cerca){
+    tapPrevio = 0;
+    if(zEsc > zMin * 1.05) escalarEn(zMin, window.innerWidth/2, window.innerHeight/2);
+    else escalarEn(1, e.clientX, e.clientY);
+  }else{
+    tapPrevio = ahora; tapX = e.clientX; tapY = e.clientY;
+  }
+});
+
+/* Si gira el teléfono, recalcula el encaje */
+window.addEventListener("resize", ()=>{
+  if(!zoomAbierto) return;
+  const img = $("imgZoom");
+  if(!img.naturalWidth) return;
+  zMin = Math.min(window.innerWidth / img.naturalWidth, window.innerHeight / img.naturalHeight);
+  if(zEsc < zMin) zEsc = zMin;
+  aplicarZoom();
+});
+
+/* En la compu: rueda del mouse para acercar */
+capaZ.addEventListener("wheel", e=>{
+  if(!zoomAbierto) return;
+  e.preventDefault();
+  escalarEn(zEsc * (e.deltaY < 0 ? 1.15 : 0.87), e.clientX, e.clientY);
+}, {passive:false});
+
+/* ================== Bloqueo de pantalla ================== */
+let wakeLock = null;
+async function pedirWakeLock(){
+  try{
+    if("wakeLock" in navigator && !wakeLock){
+      wakeLock = await navigator.wakeLock.request("screen");
+      wakeLock.addEventListener("release", ()=>{ wakeLock = null; });
+    }
+  }catch(err){/* si el sistema lo niega, seguimos igual */}
+}
+async function soltarWakeLock(){
+  try{ if(wakeLock) await wakeLock.release(); }catch(err){}
+  wakeLock = null;
+}
+/* iOS lo corta al cambiar de app: lo repedimos al volver */
+document.addEventListener("visibilitychange", ()=>{
+  if(document.visibilityState === "visible" && $("cull").classList.contains("activa"))
+    pedirWakeLock();
+});
+
+/* ================== Teclado y botones ================== */
+document.addEventListener("keydown", e=>{
+  if(!$("cull").classList.contains("activa")) return;
+  if(e.key === " " || e.code === "Space"){
+    e.preventDefault();
+    zoomAbierto ? cerrarZoom() : abrirZoom();
+    return;
+  }
+  if(e.key === "Escape"){ if(zoomAbierto){ e.preventDefault(); cerrarZoom(); } return; }
+  if(zoomAbierto) return;   // con el zoom abierto no se decide sin querer
+  if(e.key==="ArrowRight"){ e.preventDefault(); decidir("si"); }
+  else if(e.key==="ArrowLeft"){ e.preventDefault(); decidir("no"); }
+  else if(e.key==="ArrowUp"){ e.preventDefault(); decidir("duda"); }
+  else if(e.key==="ArrowDown" || e.key==="Backspace" ||
+          (e.key.toLowerCase()==="z")){ e.preventDefault(); deshacer(); }
+});
+$("accSi").addEventListener("click", ()=>decidir("si"));
+$("accNo").addEventListener("click", ()=>decidir("no"));
+$("accDuda").addEventListener("click", ()=>decidir("duda"));
+$("accUndo").addEventListener("click", deshacer);
+$("btnTerminar").addEventListener("click", irAFinal);
+
+/* ================== Pantalla final ================== */
+function irAFinal(){
+  flushGuardar();
+  clearTimeout(spinTimer);
+  ocultarSpin();
+  cargaToken++;
+  const c = contarDecisiones();
+  $("finSi").textContent = fmt(c.si);
+  $("finNo").textContent = fmt(c.no);
+  $("finDuda").textContent = fmt(c.duda);
+  $("franjaFill").style.width = "100%";
+  $("btnRepaso").style.display = c.duda ? "" : "none";
+  $("btnCopiar").style.display = (!esIOS && !esAndroid && window.showDirectoryPicker) ? "" : "none";
+  $("btnBat").style.display = (esIOS || esAndroid) ? "none" : "";
+  $("btnAtajo").style.display = (esIOS && navigator.share) ? "" : "none";
+  $("filaLista").style.display = esIOS ? "flex" : "none";
+  $("rotuloCompu").style.display = (esIOS || esAndroid) ? "" : "none";
+  $("btnCompartir").style.display = ((esIOS || esAndroid) && navigator.share) ? "" : "none";
+  $("btnCompartir").className = (esIOS || esAndroid) ? "btnSecundario" : "btnPrimario";
+  $("btnDescargas").style.display = esAndroid ? "" : "none";
+  $("enlaceZip").style.display = "none";
+  $("estadoCopia").style.display = "none";
+  $("explicBat").style.display = "none";
+  cambiarPantalla("final");
+}
+
+/* Respaldo: se puede pedir en cualquier momento, no hace falta terminar.
+   En iPhone abre el menú de compartir; en la PC descarga el .json. */
+let toastTimer = null;
+function toast(msj){
+  const t = $("toast");
+  t.textContent = msj;
+  t.classList.add("visible");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=>t.classList.remove("visible"), 2800);
+}
+async function respaldar(){
+  if(!archivos.length){ toast("Primero elegí las fotos"); return; }
+  flushGuardar();
+  const c = contarDecisiones();
+  const hechas = c.si + c.no + c.duda;
+  if(!hechas){ toast("Todavía no decidiste ninguna foto"); return; }
+  const texto = textoJson(), nombre = nombreJson();
+  if(esIOS && navigator.share && navigator.canShare){
+    try{
+      const f = new File([texto], nombre, {type:"application/json"});
+      if(navigator.canShare({files:[f]})){
+        await navigator.share({files:[f], title:"Decisiones Filtro 12:51"});
+        toast("Respaldo enviado · " + fmt(hechas) + " decisiones");
+        return;
+      }
+    }catch(err){ if(err && err.name === "AbortError") return; }
+  }
+  descargarTexto(nombre, texto);
+  toast("Respaldo guardado · " + fmt(hechas) + " decisiones");
+}
+$("btnRespaldo").addEventListener("click", respaldar);
+$("btnCompartir").addEventListener("click", respaldar);
+$("btnRepaso").addEventListener("click", empezarRepaso);
+$("btnReiniciar").addEventListener("click", ()=>{
+  if(!confirm("¿Borrar las decisiones guardadas de esta carpeta y volver al inicio?")) return;
+  borrarSesion(carpetaNombre);
+  location.reload();
+});
+
+/* --- Camino A: copiar directo (File System Access) --- */
+$("btnCopiar").addEventListener("click", async ()=>{
+  const est = $("estadoCopia");
+  try{
+    const destinoRaiz = await window.showDirectoryPicker({mode:"readwrite"});
+    est.style.display = "block";
+    est.textContent = "Preparando…";
+    const sello = new Date();
+    const nombreDest = "SELECCIONADAS_" + sello.getFullYear() +
+      String(sello.getMonth()+1).padStart(2,"0") + String(sello.getDate()).padStart(2,"0");
+    const dirSel  = await destinoRaiz.getDirectoryHandle(nombreDest, {create:true});
+    const dirDuda = await dirSel.getDirectoryHandle("dudosas", {create:true});
+
+    const van   = archivos.filter(a=>decisiones[a.clave]==="si");
+    const dudas = archivos.filter(a=>decisiones[a.clave]==="duda");
+    const total = van.length + dudas.length;
+    let hechas = 0;
+    const usados = new Set();
+
+    async function copiarA(dir, arch){
+      let nombre = arch.nombre;
+      if(usados.has(dir.name + "/" + nombre)){
+        const partes = arch.rel.split("/");
+        nombre = (partes[partes.length-2] || "x") + "_" + nombre;
+      }
+      usados.add(dir.name + "/" + nombre);
+      const h = await dir.getFileHandle(nombre, {create:true});
+      const w = await h.createWritable();
+      await arch.file.stream().pipeTo(w);
+      hechas++;
+      if(hechas % 10 === 0 || hechas === total)
+        est.textContent = "Copiando " + fmt(hechas) + " / " + fmt(total) + "…";
+    }
+    for(const a of van)   await copiarA(dirSel, a);
+    for(const a of dudas) await copiarA(dirDuda, a);
+    est.textContent = "Listo. " + fmt(van.length) + " fotos en " + nombreDest +
+      (dudas.length ? " (+" + fmt(dudas.length) + " dudosas aparte)." : ".");
+  }catch(err){
+    if(err && err.name === "AbortError") return;
+    est.style.display = "block";
+    est.textContent = "Chrome bloqueó la copia directa acá. Usá el copiar.bat de abajo, que anda siempre.";
+    $("explicBat").style.display = "block";
+  }
+});
+
+/* --- Camino B: generar copiar.bat --- */
+$("btnBat").addEventListener("click", ()=>{
+  const van   = archivos.filter(a=>decisiones[a.clave]==="si");
+  const dudas = archivos.filter(a=>decisiones[a.clave]==="duda");
+  const ruta = a => {
+    const partes = a.rel.split("/");
+    return (partes.length>1 ? partes.slice(1) : partes).join("\\");
+  };
+  let l = [
+    "@echo off",
+    "cd /d \"%~dp0\"",
+    "mkdir \"SELECCIONADAS\" 2>nul",
+    "mkdir \"SELECCIONADAS\\dudosas\" 2>nul"
+  ];
+  for(const a of van)   l.push("copy /b \"" + ruta(a) + "\" \"SELECCIONADAS\\\" >nul");
+  for(const a of dudas) l.push("copy /b \"" + ruta(a) + "\" \"SELECCIONADAS\\dudosas\\\" >nul");
+  l.push("echo Listo: " + van.length + " fotos copiadas" + (dudas.length ? " y " + dudas.length + " dudosas." : "."));
+  l.push("pause");
+  descargarTexto("copiar.bat", l.join("\r\n"));
+  $("explicBat").style.display = "block";
+});
+
+/* --- Android: un único ZIP con las elegidas, a la carpeta Descargas ---
+   Chrome bloquea las descargas seguidas disparadas por código, así que va todo
+   en un solo archivo: un toque, un permiso. Sin comprimir (los JPEG ya lo están),
+   lo que permite armarlo sin cargar las fotos en memoria. Todo local. */
+
+/* Escritor de ZIP sin compresión (método STORE) con soporte ZIP64.
+   Los JPEG ya vienen comprimidos: comprimir de nuevo no achica y quema CPU.
+   STORE permite además armar el archivo sin cargar las fotos en memoria. */
+
+const TABLA_CRC = (()=>{
+  const t = new Uint32Array(256);
+  for(let i=0;i<256;i++){
+    let c = i;
+    for(let k=0;k<8;k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+    t[i] = c >>> 0;
+  }
+  return t;
+})();
+
+function crc32Trozo(bytes, previo){
+  let c = (previo ^ 0xFFFFFFFF) >>> 0;
+  for(let i=0;i<bytes.length;i++) c = (TABLA_CRC[(c ^ bytes[i]) & 0xFF] ^ (c >>> 8)) >>> 0;
+  return (c ^ 0xFFFFFFFF) >>> 0;
+}
+
+function fechaDOS(ms){
+  const d = new Date(ms);
+  const a = Math.min(127, Math.max(0, d.getFullYear() - 1980));
+  const fecha = (a << 9) | ((d.getMonth()+1) << 5) | d.getDate();
+  const hora  = (d.getHours() << 11) | (d.getMinutes() << 5) | (d.getSeconds() >> 1);
+  return {fecha, hora};
+}
+
+function bytesNombre(nombre){
+  return new TextEncoder().encode(nombre);
+}
+
+const MAX32 = 0xFFFFFFFF;
+
+/* Cabecera local: va justo antes de los bytes de cada foto */
+function cabeceraLocal(e){
+  const nom = bytesNombre(e.nombre);
+  const zip64 = e.tam >= MAX32 || e.offset >= MAX32;
+  const extra = zip64 ? 20 : 0;
+  const b = new Uint8Array(30 + nom.length + extra);
+  const v = new DataView(b.buffer);
+  const {fecha, hora} = fechaDOS(e.mtime);
+  v.setUint32(0, 0x04034b50, true);
+  v.setUint16(4, zip64 ? 45 : 20, true);   // versión necesaria
+  v.setUint16(6, 0x0800, true);            // nombre en UTF-8
+  v.setUint16(8, 0, true);                 // método: sin compresión
+  v.setUint16(10, hora, true);
+  v.setUint16(12, fecha, true);
+  v.setUint32(14, e.crc, true);
+  v.setUint32(18, zip64 ? MAX32 : e.tam, true);
+  v.setUint32(22, zip64 ? MAX32 : e.tam, true);
+  v.setUint16(26, nom.length, true);
+  v.setUint16(28, extra, true);
+  b.set(nom, 30);
+  if(zip64){
+    const w = new DataView(b.buffer, 30 + nom.length);
+    w.setUint16(0, 0x0001, true);
+    w.setUint16(2, 16, true);
+    w.setBigUint64(4, BigInt(e.tam), true);
+    w.setBigUint64(12, BigInt(e.tam), true);
+  }
+  return b;
+}
+
+/* Entrada del índice final (directorio central) */
+function entradaCentral(e){
+  const nom = bytesNombre(e.nombre);
+  const necesitaTam = e.tam >= MAX32, necesitaOff = e.offset >= MAX32;
+  const zip64 = necesitaTam || necesitaOff;
+  const extra = zip64 ? (4 + (necesitaTam ? 16 : 0) + (necesitaOff ? 8 : 0)) : 0;
+  const b = new Uint8Array(46 + nom.length + extra);
+  const v = new DataView(b.buffer);
+  const {fecha, hora} = fechaDOS(e.mtime);
+  v.setUint32(0, 0x02014b50, true);
+  v.setUint16(4, 45, true);                // versión con la que se creó
+  v.setUint16(6, zip64 ? 45 : 20, true);
+  v.setUint16(8, 0x0800, true);
+  v.setUint16(10, 0, true);
+  v.setUint16(12, hora, true);
+  v.setUint16(14, fecha, true);
+  v.setUint32(16, e.crc, true);
+  v.setUint32(20, necesitaTam ? MAX32 : e.tam, true);
+  v.setUint32(24, necesitaTam ? MAX32 : e.tam, true);
+  v.setUint16(28, nom.length, true);
+  v.setUint16(30, extra, true);
+  v.setUint16(32, 0, true);                // sin comentario
+  v.setUint16(34, 0, true);                // disco 0
+  v.setUint16(36, 0, true);
+  v.setUint32(38, 0, true);
+  v.setUint32(42, necesitaOff ? MAX32 : e.offset, true);
+  b.set(nom, 46);
+  if(zip64){
+    const w = new DataView(b.buffer, 46 + nom.length);
+    w.setUint16(0, 0x0001, true);
+    w.setUint16(2, extra - 4, true);
+    let o = 4;
+    if(necesitaTam){ w.setBigUint64(o, BigInt(e.tam), true); o += 8;
+                     w.setBigUint64(o, BigInt(e.tam), true); o += 8; }
+    if(necesitaOff){ w.setBigUint64(o, BigInt(e.offset), true); }
+  }
+  return b;
+}
+
+/* Cierre del archivo: incluye la versión ZIP64 cuando hace falta */
+function cierre(n, tamCentral, offCentral){
+  const zip64 = n >= 0xFFFF || tamCentral >= MAX32 || offCentral >= MAX32;
+  const b = new Uint8Array((zip64 ? 56 + 20 : 0) + 22);
+  const v = new DataView(b.buffer);
+  let p = 0;
+  if(zip64){
+    v.setUint32(p, 0x06064b50, true);
+    v.setBigUint64(p+4, BigInt(44), true);       // tamaño de este registro
+    v.setUint16(p+12, 45, true);
+    v.setUint16(p+14, 45, true);
+    v.setUint32(p+16, 0, true);
+    v.setUint32(p+20, 0, true);
+    v.setBigUint64(p+24, BigInt(n), true);
+    v.setBigUint64(p+32, BigInt(n), true);
+    v.setBigUint64(p+40, BigInt(tamCentral), true);
+    v.setBigUint64(p+48, BigInt(offCentral), true);
+    p += 56;
+    v.setUint32(p, 0x07064b50, true);            // localizador
+    v.setUint32(p+4, 0, true);
+    v.setBigUint64(p+8, BigInt(offCentral + tamCentral), true);
+    v.setUint32(p+16, 1, true);
+    p += 20;
+  }
+  v.setUint32(p, 0x06054b50, true);
+  v.setUint16(p+4, 0, true);
+  v.setUint16(p+6, 0, true);
+  v.setUint16(p+8, zip64 ? 0xFFFF : n, true);
+  v.setUint16(p+10, zip64 ? 0xFFFF : n, true);
+  v.setUint32(p+12, zip64 ? MAX32 : tamCentral, true);
+  v.setUint32(p+16, zip64 ? MAX32 : offCentral, true);
+  v.setUint16(p+20, 0, true);
+  return b;
+}
+
+/* Nombres repetidos dentro del ZIP: el segundo lleva sufijo */
+function nombreUnico(nombre, usados){
+  if(!usados.has(nombre.toLowerCase())){ usados.add(nombre.toLowerCase()); return nombre; }
+  const punto = nombre.lastIndexOf(".");
+  const base = punto > 0 ? nombre.slice(0, punto) : nombre;
+  const ext  = punto > 0 ? nombre.slice(punto) : "";
+  let i = 2, cand;
+  do{ cand = base + "_" + i + ext; i++; }while(usados.has(cand.toLowerCase()));
+  usados.add(cand.toLowerCase());
+  return cand;
+}
+
+
+let armandoZip = false, cortarZip = false;
+
+/* CRC de una foto leyéndola de a pedazos: nunca entra entera en memoria */
+async function crcDeArchivo(file){
+  const PEDAZO = 4 * 1024 * 1024;
+  let crc = 0;
+  for(let o = 0; o < file.size; o += PEDAZO){
+    if(cortarZip) throw new Error("cancelado");
+    const buf = await file.slice(o, Math.min(o + PEDAZO, file.size)).arrayBuffer();
+    crc = crc32Trozo(new Uint8Array(buf), crc);
+  }
+  return crc;
+}
+
+$("btnDescargas").addEventListener("click", async ()=>{
+  const btn = $("btnDescargas"), est = $("estadoCopia");
+  if(armandoZip){ cortarZip = true; est.textContent = "Cancelando…"; return; }
+
+  const van = archivos.filter(a=>decisiones[a.clave]==="si");
+  const c = contarDecisiones();
+  if(!van.length){ toast("No hay fotos elegidas todavía"); return; }
+  if(c.duda && !confirm("Tenés " + fmt(c.duda) + " dudosas sin resolver. Se guardan SOLO las elegidas.\n\nMejor tocá \"Repasar las dudosas\" primero. ¿Seguir igual?")) return;
+
+  const totalBytes = van.reduce((t,a)=>t + a.file.size, 0);
+  const gb = totalBytes / 1073741824;
+  if(!confirm("Se va a armar UN archivo ZIP con " + fmt(van.length) + " fotos (" +
+      (gb >= 1 ? gb.toFixed(1) + " GB" : Math.round(totalBytes/1048576) + " MB") + ") en la carpeta Descargas.\n\n" +
+      "Es una sola descarga: un solo permiso.\n\nDejá la pantalla prendida hasta que termine. ¿Empezamos?")) return;
+
+  armandoZip = true; cortarZip = false;
+  btn.textContent = "Cancelar";
+  est.style.display = "block";
+  await pedirWakeLock();
+
+  try{
+    const partes = [], central = [], usados = new Set();
+    let off = 0, leidos = 0;
+    for(let i = 0; i < van.length; i++){
+      if(cortarZip) throw new Error("cancelado");
+      const a = van[i];
+      est.textContent = "Preparando " + fmt(i+1) + " / " + fmt(van.length) +
+        " · " + Math.round(leidos / totalBytes * 100) + "%";
+      const crc = await crcDeArchivo(a.file);
+      const e = {nombre: nombreUnico(a.nombre, usados), tam: a.file.size,
+                 crc, mtime: a.file.lastModified || Date.now(), offset: off};
+      const cab = cabeceraLocal(e);
+      partes.push(cab, a.file);       // el File va por referencia: no ocupa memoria
+      off += cab.length + a.file.size;
+      leidos += a.file.size;
+      central.push(e);
+      if(i % 10 === 0) await new Promise(r=>setTimeout(r, 0));   // que la pantalla respire
+    }
+    est.textContent = "Cerrando el archivo…";
+    const offCentral = off;
+    let tamCentral = 0;
+    for(const e of central){ const ce = entradaCentral(e); partes.push(ce); tamCentral += ce.length; }
+    partes.push(cierre(central.length, tamCentral, offCentral));
+
+    const nombreZip = "SELECCIONADAS_" + new Date().toISOString().slice(0,10).replace(/-/g,"") + ".zip";
+    const blob = new Blob(partes, {type:"application/zip"});
+    /* Clave: NO disparamos la descarga por código. Armar el ZIP lleva segundos y para
+       entonces Chrome ya no considera que haya una acción del usuario, así que la
+       bloquea sin avisar. En su lugar dejamos un enlace real, y el toque de ella
+       sobre ese enlace es lo que descarga. Eso ningún navegador lo bloquea. */
+    const a = $("enlaceZip");
+    if(a.href && a.href.startsWith("blob:")) URL.revokeObjectURL(a.href);
+    a.href = URL.createObjectURL(blob);
+    a.download = nombreZip;
+    a.textContent = "⬇ Guardar " + nombreZip + " (" +
+      (blob.size >= 1073741824 ? (blob.size/1073741824).toFixed(1) + " GB"
+       : blob.size >= 1048576   ? Math.round(blob.size/1048576) + " MB"
+                                : Math.max(1, Math.round(blob.size/1024)) + " KB") + ")";
+    a.style.display = "block";
+    est.textContent = "ZIP listo con " + fmt(van.length) + " fotos. Ahora tocá el botón verde de abajo para guardarlo.";
+  }catch(err){
+    est.textContent = String(err && err.message) === "cancelado"
+      ? "Cancelado. No se guardó nada."
+      : "No se pudo armar el ZIP (" + (err && err.message) + "). Probá con menos fotos.";
+  }
+  soltarWakeLock();
+  armandoZip = false; cortarZip = false;
+  btn.textContent = "Preparar ZIP con las elegidas";
+});
+
+$("enlaceZip").addEventListener("click", ()=>{
+  $("estadoCopia").textContent = "Guardando en Descargas… puede tardar un rato si el ZIP es grande. Fijate en el ícono de descargas de Chrome.";
+});
+
+/* --- Respaldo JSON --- */
+function textoJson(){
+  const c = contarDecisiones();
+  const dato = {
+    app: "Filtro 12:51",
+    carpeta: carpetaNombre,
+    fecha: new Date().toISOString(),
+    totales: c,
+    van:     archivos.filter(a=>decisiones[a.clave]==="si")
+               .map(a=>({n:a.nombre, s:a.file.size, r:a.rel})),
+    dudosas: archivos.filter(a=>decisiones[a.clave]==="duda")
+               .map(a=>({n:a.nombre, s:a.file.size, r:a.rel})),
+    no:      archivos.filter(a=>decisiones[a.clave]==="no")
+               .map(a=>({n:a.nombre, s:a.file.size, r:a.rel}))
+  };
+  return JSON.stringify(dato,null,2);
+}
+function nombreJson(){
+  const d = new Date();
+  const hora = String(d.getHours()).padStart(2,"0") + String(d.getMinutes()).padStart(2,"0");
+  return "decisiones_" + carpetaNombre.replace(/[^\w.-]/g,"_") + "_" + hora + ".json";
+}
+$("btnJson").addEventListener("click", respaldar);
+
+/* --- Lista para el Atajo de iOS (solo las que van, una por línea) --- */
+function textoLista(){
+  return archivos.filter(a=>decisiones[a.clave]==="si").map(a=>a.nombre).join("\n") + "\n";
+}
+function hayLista(){
+  const c = contarDecisiones();
+  if(!c.si){ toast("No hay fotos elegidas todavía"); return false; }
+  if(c.duda && !confirm("Tenés " + fmt(c.duda) + " dudosas sin resolver. La lista lleva SOLO las elegidas; las dudosas quedarían en FOTOS con las rechazadas.\n\nMejor tocá \"Repasar las dudosas\" primero. ¿Exportar igual?"))
+    return false;
+  return true;
+}
+$("btnAtajo").addEventListener("click", async ()=>{
+  if(!hayLista()) return;
+  const f = new File([textoLista()], "seleccionadas.txt", {type:"text/plain"});
+  try{
+    if(navigator.canShare && navigator.canShare({files:[f]})){
+      await navigator.share({files:[f], title:"Lista Filtro 12:51"});
+      return;
+    }
+  }catch(err){ if(err && err.name==="AbortError") return; }
+  descargarTexto("seleccionadas.txt", textoLista());
+  toast("No se pudo compartir; la descargué en su lugar");
+});
+$("btnListaCopiar").addEventListener("click", async ()=>{
+  if(!hayLista()) return;
+  try{
+    await navigator.clipboard.writeText(textoLista());
+    const c = contarDecisiones();
+    toast("Lista copiada: " + fmt(c.si) + " fotos que van");
+  }catch(err){
+    descargarTexto("seleccionadas.txt", textoLista());
+    toast("El portapapeles falló; la descargué como .txt");
+  }
+});
+$("btnListaTxt").addEventListener("click", ()=>{
+  if(!hayLista()) return;
+  descargarTexto("seleccionadas.txt", textoLista());
+});
+
+function descargarTexto(nombre, texto){
+  const blob = new Blob([texto], {type:"application/octet-stream"});
+  const u = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = u; a.download = nombre;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(u), 4000);
+}
+
+/* ================== Arranque ================== */
+// Esta prueba no registra ni elimina service workers o cachés de la web habitual.
+abrirDB().then(async ok=>{
+  if(!ok){
+    mostrarAviso("Ojo: acá no puedo guardar el avance automáticamente. Si estás viendo esto dentro de Claude, descargá el archivo y abrilo con Chrome haciendo doble clic — ahí sí queda todo guardado.");
+    return;
+  }
+  // Si la app se cerró sola a mitad de camino, que se vea apenas abrís
+  const s = await ultimaSesion();
+  if(s && Date.now() - s.fecha < 7*24*60*60*1000){
+    mostrarAviso("Tenés una sesión guardada (" + s.nombre + ") con " + fmt(s.n) +
+      " fotos ya decididas. Elegí las mismas fotos otra vez y te pregunto si querés seguir desde ahí.");
+  }
+});
+</script>
+</body>
+</html>
