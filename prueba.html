@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#0A1440">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>Filtro 12:51 — Prueba de carpetas</title>
+<title>Filtro 12:51 — Prueba de miniaturas</title>
 <meta name="robots" content="noindex,nofollow">
 <style>
   :root{
@@ -281,6 +281,27 @@
     .sello{font-size:30px;border-width:4px;top:16px}
     #escenario{padding:6px 8px}
   }
+
+  /* Tira fija: cinco casilleros, sin scroll ni animaciones. */
+  #tiraFotos{flex:none;display:grid;grid-template-columns:1fr 1fr 1.15fr 1fr 1fr;
+    align-items:center;gap:6px;width:min(460px,calc(100% - 24px));margin:4px auto 0;
+    height:104px;overflow:hidden;pointer-events:none}
+  .miniFoto{min-width:0;margin:0;text-align:center;color:var(--gris);font-size:11px}
+  .miniFoto canvas{display:block;width:100%;aspect-ratio:4/3;height:auto;
+    background:#050A24;border:2px solid var(--azul-borde);border-radius:8px}
+  .miniFoto.actual canvas{border-color:var(--oro)}
+  .miniFoto.actual{color:var(--oro);font-weight:800}
+  .miniFoto figcaption{height:16px;line-height:16px;white-space:nowrap}
+  .miniFoto.vacia{visibility:hidden}
+  .miniFoto[data-decision="si"] figcaption::before{content:"● ";color:var(--si)}
+  .miniFoto[data-decision="no"] figcaption::before{content:"● ";color:var(--no)}
+  .miniFoto[data-decision="duda"] figcaption::before{content:"● ";color:var(--duda)}
+  #foto{max-height:calc(100vh - 340px);max-height:calc(100dvh - 340px)}
+  #tarjeta.cargandoFoto{min-height:min(30vh,260px)}
+  @media(max-height:600px){
+    #tiraFotos{height:64px;width:min(310px,calc(100% - 24px))}
+    #foto{max-height:calc(100vh - 280px);max-height:calc(100dvh - 280px)}
+  }
 </style>
 </head>
 <body>
@@ -292,7 +313,7 @@
   <div class="marca">
     <div class="titulo">Filtro <em>12:51</em></div>
     <div class="bandaOro"></div>
-    <div class="bajada"><strong style="color:var(--oro)">PRUEBA DE CARPETAS · v1</strong><br>Elegí la carpeta completa. Las decisiones de esta prueba se guardan aparte.</div>
+    <div class="bajada"><strong style="color:var(--oro)">PRUEBA DE MINIATURAS · v2</strong><br>Dos fotos anteriores y dos siguientes, con la actual resaltada. Guardado de prueba separado.</div>
   </div>
 
   <div id="aviso"></div>
@@ -354,6 +375,13 @@
     <div id="nivelZoom">100%</div>
   </div>
 
+  <div id="tiraFotos" role="group" aria-label="Dos fotos anteriores, actual y dos siguientes">
+    <figure class="miniFoto vacia" id="mini0"><canvas width="160" height="120" aria-hidden="true"></canvas><figcaption></figcaption></figure>
+    <figure class="miniFoto vacia" id="mini1"><canvas width="160" height="120" aria-hidden="true"></canvas><figcaption></figcaption></figure>
+    <figure class="miniFoto actual vacia" id="mini2"><canvas width="160" height="120" aria-hidden="true"></canvas><figcaption></figcaption></figure>
+    <figure class="miniFoto vacia" id="mini3"><canvas width="160" height="120" aria-hidden="true"></canvas><figcaption></figcaption></figure>
+    <figure class="miniFoto vacia" id="mini4"><canvas width="160" height="120" aria-hidden="true"></canvas><figcaption></figcaption></figure>
+  </div>
   <div class="barraInf">
     <button id="accUndo" disabled>↩ Deshacer<br><span class="tecla">Z</span></button>
     <button id="accNo" class="btnAccion">NO<span class="tecla">← izquierda</span></button>
@@ -695,6 +723,7 @@ function mostrarAviso(msj){
 
 /* ================== Flujo principal ================== */
 function empezar(){
+  vaciarMiniaturas();
   modoRepaso = false;
   document.body.classList.remove("modoRepaso");
   cola = orden.map((_,i)=>i).filter(i => decisiones[archivos[orden[i]].clave] === undefined);
@@ -709,6 +738,7 @@ function empezar(){
 }
 
 function empezarRepaso(){
+  vaciarMiniaturas();
   modoRepaso = true;
   document.body.classList.add("modoRepaso");
   cola = orden.map((_,i)=>i).filter(i => decisiones[archivos[orden[i]].clave] === "duda");
@@ -757,6 +787,69 @@ function refrescar(){
   resetTarjeta();
   precargar();
   limpiarCache();
+  refrescarMiniaturas();
+}
+
+
+/* Miniaturas: se dibujan desde imágenes YA decodificadas por el visor/precarga.
+   No lee archivos, no crea URLs ni solicita previews adicionales.
+   Máximo cinco copias de 160x120; los cinco canvas visibles se reutilizan. */
+const miniCache = new Map();
+function indicesMini(){
+  return [-2,-1,0,1,2].map(k=>{
+    const p = pos + k;
+    return p >= 0 && p < cola.length ? cola[p] : null;
+  });
+}
+function vaciarMiniaturas(){
+  for(const c of miniCache.values()){ c.width = 0; c.height = 0; }
+  miniCache.clear();
+  for(let i=0;i<5;i++){
+    const el = $("mini"+i);
+    el.classList.add("vacia");
+    el.querySelector("canvas").getContext("2d").clearRect(0,0,160,120);
+    el.querySelector("figcaption").textContent = "";
+    el.removeAttribute("data-decision");
+  }
+}
+function guardarMiniatura(id, imagen){
+  if(!$("cull").classList.contains("activa") || miniCache.has(id) || !indicesMini().includes(id) ||
+     !imagen.complete || !imagen.naturalWidth) return;
+  const c = document.createElement("canvas");
+  c.width = 160; c.height = 120;
+  const ctx = c.getContext("2d");
+  if(!ctx) return;
+  const esc = Math.min(160/imagen.naturalWidth,120/imagen.naturalHeight);
+  const w = imagen.naturalWidth*esc, h = imagen.naturalHeight*esc;
+  ctx.drawImage(imagen,(160-w)/2,(120-h)/2,w,h);
+  miniCache.set(id,c);
+  pintarMiniaturas();
+}
+function pintarMiniaturas(){
+  const ids = indicesMini();
+  for(const [id,c] of miniCache){
+    if(!ids.includes(id)){c.width=0;c.height=0;miniCache.delete(id);}
+  }
+  ids.forEach((id,i)=>{
+    const el = $("mini"+i), c = el.querySelector("canvas"), ctx = c.getContext("2d");
+    ctx.clearRect(0,0,160,120);
+    el.classList.toggle("vacia",id === null);
+    const label = el.querySelector("figcaption");
+    if(id === null){ label.textContent="";el.removeAttribute("data-decision");return; }
+    const arch = archivos[orden[id]];
+    label.textContent = (i === 2 ? "Actual · " : "") + (id+1);
+    el.setAttribute("aria-label", (i===2 ? "Foto actual: " : "Foto: ") + arch.nombre);
+    el.setAttribute("data-decision",decisiones[arch.clave] || "");
+    if(miniCache.has(id)) ctx.drawImage(miniCache.get(id),0,0);
+  });
+}
+function refrescarMiniaturas(){
+  pintarMiniaturas();
+  for(const id of indicesMini()){
+    if(id === null) continue;
+    const im = cachePre.get(id);
+    if(im) guardarMiniatura(id,im);
+  }
 }
 
 /* ================== Carga de la foto en pantalla ================== */
@@ -776,6 +869,7 @@ function mostrarFoto(idxOrden, arch){
     ocultarSpin();
     t.classList.remove("cargandoFoto");
     img.style.visibility = "visible";
+    guardarMiniatura(idxOrden, img);
   };
   img.onerror = ()=>{
     if(tok !== cargaToken) return;
@@ -1014,8 +1108,10 @@ function precargar(){
         if(!u || !cachePre.has(id)) return;
         const im = new Image();               // decodifica el preview chico para que el swipe no espere
         im.decoding = "async";
+        im.onload = ()=>{ if(cachePre.get(id) === im) guardarMiniatura(id, im); };
         im.src = u;
         cachePre.set(id, im);
+        guardarMiniatura(id, im);
       });
     }
   }
@@ -1324,6 +1420,7 @@ $("btnTerminar").addEventListener("click", irAFinal);
 
 /* ================== Pantalla final ================== */
 function irAFinal(){
+  vaciarMiniaturas();
   flushGuardar();
   clearTimeout(spinTimer);
   ocultarSpin();
