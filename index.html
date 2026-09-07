@@ -533,13 +533,25 @@ let importPendiente = null;
 
 if(esIOS){
   $("btnCarpeta").textContent = "Elegir fotos";
+  if("webkitdirectory" in $("inputCarpeta")){
+    $("btnCarpeta").textContent = "Elegir carpeta completa";
+    const alternativa = document.createElement("button");
+    alternativa.id = "btnFotosAlternativa";
+    alternativa.className = "btnSecundario";
+    alternativa.textContent = "Elegir archivos individuales (alternativa)";
+    alternativa.addEventListener("click", ()=> $("inputFotos").click());
+    $("btnCarpeta").insertAdjacentElement("afterend", alternativa);
+  }
   $("btnImportar").style.display = "none";
   document.querySelector("#inicio .nota").innerHTML =
-    "Tocá el botón, elegí <strong>Elegir archivos</strong> y marcá todas las fotos de la carpeta que copiaste en Archivos.<br>Funciona sin internet una vez abierta. No borra ni modifica nada.";
+    ("webkitdirectory" in $("inputCarpeta")
+      ? "Tocá <strong>Elegir carpeta completa</strong> y seleccioná la carpeta local de la cobertura en <strong>En mi iPhone</strong>. No hace falta marcar cada foto.<br>"
+      : "Tocá el botón, elegí <strong>Elegir archivos</strong> y marcá las fotos de la carpeta que copiaste en Archivos.<br>") +
+    "Funciona sin internet una vez abierta. No borra ni modifica nada.";
 }
 
 $("btnCarpeta").addEventListener("click", ()=>{
-  (esIOS ? $("inputFotos") : $("inputCarpeta")).click();
+  (esIOS && !("webkitdirectory" in $("inputCarpeta")) ? $("inputFotos") : $("inputCarpeta")).click();
 });
 $("btnImportar").addEventListener("click", ()=> $("inputJson").click());
 
@@ -571,7 +583,7 @@ async function procesarLista(e){
   e.target.value = "";
   if(!lista.length){
     mostrarAviso(esIOS
-      ? "No llegó ninguna foto JPEG. Probá de nuevo: tocá el botón, andá a Elegir archivos y marcá las fotos."
+      ? "No llegó ninguna foto JPEG. Elegí la carpeta que contiene los JPG de la cámara o probá elegir archivos individuales."
       : "No encontré archivos JPEG en esa carpeta. Fijate de elegir la carpeta DCIM de la SD (o la que tenga las fotos).");
     return;
   }
